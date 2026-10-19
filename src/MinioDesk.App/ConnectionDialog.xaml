@@ -1,0 +1,16 @@
+<Window x:Class="MinioDesk.App.ConnectionDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Conexión MinIO" Width="510" Height="700" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="#F3F6F8">
+  <Grid Margin="28,24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel><TextBlock Text="Conecta tu almacenamiento" FontSize="23" FontWeight="SemiBold"/><TextBlock Text="Usa el endpoint de la API S3, no la consola web." Foreground="{StaticResource Muted}" Margin="0,7,0,20"/><WrapPanel><Button Content="Local · 9000" Click="UseFirstLocal" Padding="10,5"/><Button Content="Local · 9100" Click="UseSecondLocal" Padding="10,5"/></WrapPanel></StackPanel>
+    <StackPanel Grid.Row="1" Margin="0,18,0,0" x:Name="Fields">
+      <TextBlock Text="Nombre" Margin="0,0,0,5"/><TextBox x:Name="NameInput" MaxLength="100"/>
+      <TextBlock Text="Endpoint S3" Margin="0,12,0,5"/><TextBox x:Name="EndpointInput"/>
+      <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Región" Margin="0,0,0,5"/><TextBox x:Name="RegionInput"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Bucket fijo (opcional)" Margin="0,0,0,5"/><TextBox x:Name="BucketInput"/></StackPanel></Grid>
+      <TextBlock Text="Access key" Margin="0,12,0,5"/><TextBox x:Name="AccessInput"/>
+      <TextBlock Text="Secret key" Margin="0,12,0,5"/><PasswordBox x:Name="SecretInput"/>
+      <TextBlock Text="Las credenciales se cifran con tu usuario de Windows. El bucket fijo permite conectar usuarios sin permiso para listar todos los buckets." Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,14,0,0"/>
+    </StackPanel>
+    <StackPanel Grid.Row="2"><TextBlock x:Name="Feedback" TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,14"/><DockPanel><Button x:Name="TestButton" Content="Probar conexión" Click="TestConnection" DockPanel.Dock="Left"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="BackButton" Content="Cancelar" IsCancel="True"/><Button x:Name="SaveButton" Content="Guardar" Click="SaveConnection" Style="{StaticResource PrimaryButton}" Margin="0" IsDefault="True"/></StackPanel></DockPanel></StackPanel>
+  </Grid>
+</Window>

@@ -1,0 +1,43 @@
+# Configuración y credenciales locales
+.env
+.env.*
+!.env.example
+.aws/
+connections.json
+connections.json.*
+*.pfx
+*.p12
+*.key
+*.pem
+
+# SDK, NuGet, laboratorio MinIO y datos generados
+.local/
+artifacts/
+samples/
+*.parquet
+.venv/
+__pycache__/
+
+# Compilación .NET
+**/bin/
+**/obj/
+
+# Configuración personal del IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# Diagnóstico y resultados de pruebas
+*.log
+*.dmp
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Archivos temporales del sistema
+.DS_Store
+Thumbs.db
+Desktop.ini
+

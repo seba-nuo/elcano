@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/MinioDesk.Core/MinioDesk.Core.csproj"/>
+    <Content Include="../../.local/runtime-extensions/httpfs.duckdb_extension" Condition="Exists('../../.local/runtime-extensions/httpfs.duckdb_extension')" Link="extensions/httpfs.duckdb_extension" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
