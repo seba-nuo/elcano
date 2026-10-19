@@ -28,6 +28,7 @@ public sealed class MainViewModel : Observable
     private string status = "Añade una conexión para explorar tus archivos.";
     private string error = "";
     private string previewTitle = "Vista previa de Parquet";
+    private string previewSummary = "";
     private DataView? previewRows;
     private DataView? previewSchema;
     private ConnectionProfile? selectedProfile;
@@ -46,6 +47,7 @@ public sealed class MainViewModel : Observable
     public string Error { get => error; private set { if (Set(ref error, value)) Notify(nameof(HasError)); } }
     public bool HasError => Error.Length > 0;
     public string PreviewTitle { get => previewTitle; private set => Set(ref previewTitle, value); }
+    public string PreviewSummary { get => previewSummary; private set => Set(ref previewSummary, value); }
     public DataView? PreviewRows { get => previewRows; private set => Set(ref previewRows, value); }
     public DataView? PreviewSchema { get => previewSchema; private set => Set(ref previewSchema, value); }
     public string Location => selectedBucket is null ? "Selecciona una conexión" : $"{selectedBucket} / {prefix}";
@@ -182,7 +184,7 @@ public sealed class MainViewModel : Observable
     private void ClearPage() { pageIndex = 0; nextToken = null; pageTokens.Clear(); pageTokens.Add(null); pageEntries = []; Entries.Clear(); SelectedEntry = null; Notify(nameof(PageLabel)); }
     private void SetPage(ObjectPage page) { pageEntries = page.Entries; nextToken = page.NextToken; SelectedEntry = null; ApplyFilter(); Notify(nameof(Location)); Notify(nameof(PageLabel)); Status = page.Entries.Count == 0 ? "Esta carpeta está vacía." : $"{page.Entries.Count} elementos en esta página."; }
     private void ApplyFilter() => Entries = new ObservableCollection<ObjectEntry>(pageEntries.Where(item => item.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase)));
-    private void ClearPreview() { PreviewRows = null; PreviewSchema = null; IsPreviewOpen = false; }
+    private void ClearPreview() { PreviewRows = null; PreviewSchema = null; PreviewSummary = ""; IsPreviewOpen = false; }
 
     public void OpenSelected()
     {
@@ -212,6 +214,7 @@ public sealed class MainViewModel : Observable
     {
         PreviewRows = result.Rows.DefaultView; PreviewSchema = result.Schema.DefaultView;
         PreviewTitle = name; IsPreviewOpen = true;
+        PreviewSummary = $"{result.Rows.Rows.Count} filas en la vista previa · {result.Schema.Rows.Count} columnas en el archivo";
         Status = $"Vista previa: {result.Rows.Rows.Count} filas · {result.Schema.Rows.Count} columnas. Máximo 200 filas, 64 columnas y 512 caracteres por celda.";
     }
 
@@ -269,10 +272,11 @@ public sealed class MainViewModel : Observable
     }
 
     public void Cancel() => operation?.Cancel();
-    public void LoadDesignPreview()
+    public void LoadDesignPreview(bool populated = true)
     {
-        Profiles.Add(new ConnectionProfile { Name = "MinIO local", Endpoint = "http://localhost:9000" });
-        Profiles.Add(new ConnectionProfile { Name = "MinIO secundario", Endpoint = "http://localhost:9100" });
+        if (!populated) { storeReady = true; RefreshCommands(); return; }
+        Profiles.Add(new ConnectionProfile { Name = "Almacenamiento", Endpoint = "https://storage.ejemplo.com" });
+        Profiles.Add(new ConnectionProfile { Name = "Desarrollo", Endpoint = "https://dev.ejemplo.com" });
         SelectedProfile = Profiles[0]; connected = true; selectedBucket = "analytics"; Buckets.Add("analytics"); Buckets.Add("documentos");
         prefix = "ventas/2026/";
         SetPage(new ObjectPage([

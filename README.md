@@ -50,11 +50,11 @@ Solicita al administrador del servidor estos datos:
 
 Para crear el perfil:
 
-1. Pulsa **+** junto a **Conexiones**.
+1. Pulsa **+** en el área de conexiones de la esquina superior derecha.
 2. Completa los datos del servidor.
 3. Pulsa **Probar conexión**.
 4. Pulsa **Guardar**.
-5. Selecciona el perfil y pulsa **Conectar**.
+5. Selecciona el perfil en el desplegable y pulsa **Conectar**.
 6. Elige un bucket para explorar sus archivos.
 
 Utiliza el endpoint de la **API S3**, que puede ser diferente de la dirección de la consola web de MinIO. Incluye el esquema HTTP o HTTPS y el servidor, sin añadir el nombre del bucket ni rutas de archivos.
@@ -71,6 +71,8 @@ Para HTTPS, el certificado debe ser válido y de confianza en el equipo. Si se u
 - **Descargar:** selecciona un archivo y elige dónde guardarlo.
 - **Ver Parquet:** selecciona un archivo Parquet o haz doble clic sobre él.
 - **Abrir Parquet local:** visualiza un archivo del equipo sin conectarte a un servidor.
+
+Las conexiones se seleccionan en el desplegable de la esquina superior derecha; el menú **⋯** permite editar o quitar el perfil seleccionado. El explorador ocupa el panel izquierdo y el visor muestra los datos en el área central.
 
 Para cambiar de servidor, selecciona otro perfil y pulsa **Conectar**. Si se crean nuevos buckets después de conectar, pulsa de nuevo **Conectar** para actualizar la lista.
 

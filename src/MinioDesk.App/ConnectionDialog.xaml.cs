@@ -12,12 +12,14 @@ public partial class ConnectionDialog : Window
     {
         InitializeComponent();
         id = existing?.Id ?? Guid.NewGuid();
-        NameInput.Text = existing?.Name ?? "MinIO local";
-        EndpointInput.Text = existing?.Endpoint ?? "http://localhost:9000";
-        RegionInput.Text = existing?.Region ?? "us-east-1";
+        DialogHeading.Text = existing is null ? "Nueva conexión" : "Editar conexión";
+        NameInput.Text = existing?.Name ?? "";
+        EndpointInput.Text = existing?.Endpoint ?? "";
+        RegionInput.Text = existing?.Region ?? "";
         BucketInput.Text = existing?.Bucket ?? "";
         AccessInput.Text = existing?.AccessKey ?? "";
         SecretInput.Password = existing?.SecretKey ?? "";
+        SecretPlaceholder.Visibility = SecretInput.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         Closed += (_, _) => cancellation.Cancel();
     }
     private ConnectionProfile ReadProfile()
@@ -26,8 +28,11 @@ public partial class ConnectionDialog : Window
             Region = RegionInput.Text.Trim(), Bucket = BucketInput.Text.Trim(), AccessKey = AccessInput.Text.Trim(), SecretKey = SecretInput.Password };
         profile.Validate(); return profile;
     }
-    private void UseFirstLocal(object sender, RoutedEventArgs e) { EndpointInput.Text = "http://localhost:9000"; NameInput.Text = "MinIO local"; }
-    private void UseSecondLocal(object sender, RoutedEventArgs e) { EndpointInput.Text = "http://localhost:9100"; NameInput.Text = "MinIO secundario"; }
+    private void SecretChanged(object sender, RoutedEventArgs e)
+    {
+        if (SecretPlaceholder is not null)
+            SecretPlaceholder.Visibility = SecretInput.Password.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
     private void SaveConnection(object sender, RoutedEventArgs e)
     {
         try { Result = ReadProfile(); DialogResult = true; }

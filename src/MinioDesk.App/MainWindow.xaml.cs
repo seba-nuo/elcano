@@ -11,7 +11,19 @@ public partial class MainWindow : Window
     public MainWindow() { InitializeComponent(); DataContext = ViewModel; }
     private void OpenObject(object sender, MouseButtonEventArgs e)
     {
-        if (ItemsControl.ContainerFromElement(ObjectGrid, e.OriginalSource as DependencyObject) is DataGridRow) ViewModel.OpenSelected();
+        if (ItemsControl.ContainerFromElement(ObjectGrid, e.OriginalSource as DependencyObject) is ListBoxItem) ViewModel.OpenSelected();
+    }
+    private void OpenObjectKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { ViewModel.OpenSelected(); e.Handled = true; }
+    }
+    private void OpenConnectionMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
     }
     private void PreviewColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
     {

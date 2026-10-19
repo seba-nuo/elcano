@@ -4,7 +4,7 @@ public sealed record ConnectionProfile
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; init; } = "";
-    public string Endpoint { get; init; } = "http://localhost:9000";
+    public string Endpoint { get; init; } = "";
     public string Region { get; init; } = "us-east-1";
     public string Bucket { get; init; } = "";
     public string AccessKey { get; init; } = "";
@@ -16,7 +16,7 @@ public sealed record ConnectionProfile
         if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri) ||
             (uri.Scheme != "http" && uri.Scheme != "https") ||
             uri.AbsolutePath != "/" || uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0)
-            throw new ArgumentException("Usa un endpoint S3 como https://servidor:9000, sin rutas ni credenciales.");
+            throw new ArgumentException("Usa una dirección como https://storage.ejemplo.com, sin rutas ni credenciales.");
         if (string.IsNullOrWhiteSpace(AccessKey) || string.IsNullOrWhiteSpace(SecretKey))
             throw new ArgumentException("Escribe la access key y la secret key.");
         if (string.IsNullOrWhiteSpace(Region)) throw new ArgumentException("Escribe la región del servidor.");
