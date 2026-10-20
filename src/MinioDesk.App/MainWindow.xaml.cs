@@ -45,7 +45,7 @@ public partial class MainWindow : Window
     }
     private void OpenFileMenu(object sender, ContextMenuEventArgs e)
     {
-        if (ViewModel.SelectedEntry is not { IsFolder: false }) e.Handled = true;
+        if (ViewModel.SelectedEntry is null) e.Handled = true;
     }
 
     private void QueryChanged(object sender, EventArgs e)

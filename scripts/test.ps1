@@ -1,7 +1,8 @@
-param([switch]$Integration)
+param([switch]$Integration, [switch]$FolderProtocol)
 . "$PSScriptRoot/common.ps1"
 Push-Location $projectRoot
 try {
+    if ($Integration -and $FolderProtocol) { throw 'Usa -Integration o -FolderProtocol, no ambos.' }
     $testDirectory = Join-Path $projectRoot ('.local\test-runs\' + [Guid]::NewGuid().ToString('N'))
     $testMode = '--local'
     if ($Integration) {
@@ -10,5 +11,6 @@ try {
         }
         $testMode = '--integration'
     }
+    if ($FolderProtocol) { $testMode = '--folder-protocol' }
     Invoke-Dotnet run --project tests/MinioDesk.Smoke -c Release -- $testMode $testDirectory
 } finally { Pop-Location }

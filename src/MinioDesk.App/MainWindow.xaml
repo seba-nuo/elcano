@@ -97,8 +97,8 @@
                    VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
             <ListBox.ContextMenu>
               <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                <MenuItem Header="Descargar archivo" Command="{Binding DownloadCommand}"/>
-                <MenuItem Header="Eliminar archivo" Command="{Binding DeleteCommand}" Foreground="{DynamicResource ErrorText}"/>
+                <MenuItem Header="{Binding DownloadAction}" Command="{Binding DownloadCommand}"/>
+                <MenuItem Header="{Binding DeleteAction}" Command="{Binding DeleteCommand}" Foreground="{DynamicResource ErrorText}"/>
               </ContextMenu>
             </ListBox.ContextMenu>
             <ListBox.ItemContainerStyle>
@@ -146,6 +146,20 @@
           <TextBlock Text="Aquí aparecerán tus archivos." Foreground="{DynamicResource Muted}" FontSize="12" TextAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Entries.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
           </TextBlock>
+          <Border Background="{DynamicResource Surface}" Visibility="{Binding IsExplorerLoading, Converter={StaticResource BoolVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="8">
+              <Grid Width="28" Height="28" Margin="0,0,0,12" RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform><RotateTransform x:Name="ExplorerLoadingRotation"/></Grid.RenderTransform>
+                <Grid.Style><Style TargetType="Grid"><Style.Triggers><Trigger Property="IsVisible" Value="True">
+                  <Trigger.EnterActions><BeginStoryboard Name="ExplorerLoadingSpin"><Storyboard><DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:0.9" RepeatBehavior="Forever"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
+                  <Trigger.ExitActions><RemoveStoryboard BeginStoryboardName="ExplorerLoadingSpin"/></Trigger.ExitActions>
+                </Trigger></Style.Triggers></Style></Grid.Style>
+                <Ellipse Stroke="{DynamicResource BorderBrush}" StrokeThickness="2.5" Margin="3"/>
+                <Path Data="M 14,3 A 11,11 0 0 1 25,14" Stroke="{DynamicResource Accent}" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+              </Grid>
+              <TextBlock Text="Cargando archivos…" Foreground="{DynamicResource Muted}" TextAlignment="Center" FontSize="12"/>
+            </StackPanel>
+          </Border>
         </Grid>
         <Border x:Name="PaginationFooter" Grid.Row="6" Margin="0,8,0,0" Padding="0,7,0,0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
           <Grid>
@@ -290,10 +304,10 @@
       </Border>
     </Grid>
 
-    <Border Grid.Column="2" Grid.Row="2" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
+    <Border x:Name="StatusFooter" Grid.Column="2" Grid.Row="2" Height="44" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
       <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+        <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Status}" FontSize="11" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
         <ProgressBar Grid.Column="1" Height="5" Value="{Binding Progress, Mode=OneWay}" Maximum="100" VerticalAlignment="Center" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}"/>
         <Button Grid.Column="2" Content="Cancelar" Command="{Binding CancelCommand}" Margin="12,0,0,0" Padding="9,4" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}"/>
         <TextBlock x:Name="ConnectionStatusText" Grid.Column="3" Text="{Binding ConnectionState}" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="16,0,0,0">

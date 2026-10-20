@@ -9,7 +9,7 @@ Ejecuta los comandos desde la raíz del repositorio:
 | `common.ps1` | Configura el SDK local o instalado, las cachés de NuGet y la función que comprueba errores de `dotnet`. Lo cargan los otros scripts. | No hace falta ejecutarlo por separado. |
 | `run.ps1` | Compila si hay cambios y abre la aplicación WPF en modo Release. | `.\scripts\run.ps1` |
 | `publish.ps1` | Prepara la extensión nativa `httpfs` y genera una carpeta portable para Windows x64, incluyendo .NET y DuckDB. | `.\scripts\publish.ps1` |
-| `test.ps1` | Ejecuta comprobaciones de perfiles cifrados y Parquet local. Con `-Integration`, también prueba los dos servidores locales usando buckets temporales que elimina al terminar. | `.\scripts\test.ps1` o `.\scripts\test.ps1 -Integration` |
+| `test.ps1` | Comprueba perfiles cifrados, Parquet, CSV, TXT y caché. Con `-FolderProtocol`, prueba ZIP, paginación, eliminación recursiva, cancelación y errores parciales contra un S3 simulado local. Con `-Integration`, prueba los dos MinIO locales usando buckets temporales que elimina al terminar. | `.\scripts\test.ps1`, `.\scripts\test.ps1 -FolderProtocol` o `.\scripts\test.ps1 -Integration` |
 | `seed-samples.ps1` | Genera cinco Parquet, dos CSV y un TXT sintéticos por servidor; los sube y verifica su vista previa. Con `-PaginationFiles` añade objetos para probar páginas. | `.\scripts\seed-samples.ps1 -UseLocalLabCredentials` |
 
 Las cachés, archivos generados y copias locales de los ejemplos se guardan bajo `.local/`, excluido de Git. La aplicación publicada se guarda en `artifacts/`. La primera restauración de paquetes o descarga de `httpfs` requiere Internet.

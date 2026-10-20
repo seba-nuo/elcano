@@ -9,7 +9,7 @@ Aplicación de escritorio para **Windows** que permite conectarse a **MinIO**, e
 - Explorar buckets y carpetas virtuales, con navegación por páginas.
 - Filtrar y ordenar los archivos de la página actual.
 - Subir archivos con progreso, cancelación y carga multipart para archivos grandes.
-- Descargar archivos por streaming y eliminar archivos desde su menú contextual.
+- Descargar archivos por streaming, descargar carpetas como ZIP y eliminar archivos o carpetas desde su menú contextual.
 - Consultar Parquet y CSV remotos o locales con SQL, vista previa y autocompletado de columnas.
 - Abrir TXT como texto y reutilizar vistas recientes mediante una caché limitada en memoria.
 - Alternar entre tema claro y oscuro, con la preferencia guardada en el equipo.
@@ -65,13 +65,13 @@ Para HTTPS, el certificado debe ser válido y de confianza en el equipo. Si se u
 
 ## Uso básico
 
-- **Carpetas:** haz doble clic para entrar, utiliza **↑** para subir o pulsa un segmento de la ruta para volver a ese nivel. En rutas profundas, **…** abre un menú con todos los antecesores; los últimos niveles permanecen visibles. La ruta completa situada debajo se puede seleccionar y copiar.
+- **Carpetas:** haz doble clic para entrar, utiliza **↑** para subir o pulsa un segmento de la ruta para volver a ese nivel. En rutas profundas, **…** abre un menú con todos los antecesores; los últimos niveles permanecen visibles. La ruta completa situada debajo se puede seleccionar y copiar. Un indicador giratorio aparece mientras se carga el explorador.
 - **Actualizar:** pulsa el icono de flecha circular junto al desplegable del bucket para recargar la carpeta actual.
 - **Filtrar:** busca nombres entre los elementos de la página actual.
 - **Anterior / Siguiente:** cambia de página, de hasta 200 elementos cada una. El pie del explorador muestra **Página X de Y** y el total de archivos y subcarpetas del nivel actual. El recuento se hace en segundo plano, sin recorrer el contenido de las subcarpetas; si no está disponible se conserva la navegación por páginas. Pulsa **Actualizar** para renovar los totales.
 - **Subir:** pulsa el icono de flecha hacia arriba junto a la ruta de la carpeta, selecciona archivos y confirma la carga. Si existe una clave con el mismo nombre, su contenido actual se reemplaza.
-- **Descargar:** haz clic secundario sobre un archivo, elige **Descargar archivo** y selecciona dónde guardarlo.
-- **Eliminar:** haz clic secundario sobre un archivo y elige **Eliminar archivo**. La aplicación pide confirmación e indica la conexión, el bucket y la clave del objeto. El resultado en buckets con versionado depende de la configuración del servidor.
+- **Descargar:** haz clic secundario sobre un archivo y elige **Descargar archivo**. En una carpeta, **Descargar carpeta (ZIP)** incluye sus archivos, subcarpetas y carpetas vacías. Selecciona dónde guardar el resultado.
+- **Eliminar:** haz clic secundario y elige **Eliminar archivo** o **Eliminar carpeta y su contenido**. La aplicación pide confirmación e indica la conexión y la ruta completa. Para carpetas, cuenta primero los archivos que se eliminarán, incluidas las subcarpetas.
 - **Ver un archivo:** haz doble clic sobre un Parquet, CSV o TXT, o selecciónalo y pulsa **Enter**. Un indicador giratorio aparece mientras se abre.
 - **Abrir archivo local:** visualiza un Parquet, CSV o TXT del equipo sin conectarte a un servidor.
 - **Tema:** pulsa la luna para activar el modo oscuro o el sol para volver al modo claro.
@@ -79,6 +79,10 @@ Para HTTPS, el certificado debe ser válido y de confianza en el equipo. Si se u
 Las conexiones se seleccionan en el desplegable de la esquina superior derecha; el menú **⋯** permite editar o quitar el perfil seleccionado. El estado **Conectado / Sin conexión** aparece abajo a la derecha: **Sin conexión** se muestra en rojo. El explorador ocupa el panel izquierdo y el visor muestra los datos en el área central.
 
 Para cambiar de servidor, selecciona otro perfil y pulsa **Conectar**. Si se crean nuevos buckets después de conectar, pulsa de nuevo **Conectar** para actualizar la lista.
+
+Las operaciones de carpetas preparan un inventario temporal de claves que se elimina al terminar. La descarga transmite el contenido al ZIP sin cargar los archivos completos en memoria; el archivo de destino se reemplaza solo cuando termina correctamente. Al cancelar o fallar se elimina el ZIP parcial. Los nombres incompatibles con Windows y las colisiones de mayúsculas se rechazan para evitar perder archivos al extraerlos.
+
+La eliminación de carpetas trabaja por lotes y puede cancelarse. Los objetos ya eliminados no se restauran al cancelar o ante un error; el explorador intenta actualizarse al terminar. Se eliminan las claves visibles: en buckets con versionado no se purga el historial. Estas acciones requieren seleccionar una carpeta concreta y no admiten la raíz completa del bucket.
 
 ## Visualización de archivos
 
@@ -187,6 +191,9 @@ Comandos principales:
 
 # Ejecutar las comprobaciones locales
 .\scripts\test.ps1
+
+# Probar operaciones de carpetas contra un servidor S3 simulado local
+.\scripts\test.ps1 -FolderProtocol
 ~~~
 
 Los scripts guardan sus herramientas y cachés en **.local/**, excluido de Git. No son necesarios para usar la aplicación portable. Consulta [scripts/README.md](scripts/README.md) para conocer las utilidades adicionales.

@@ -14,6 +14,7 @@ public sealed class MainViewModel : Observable
 {
     private readonly ProfileStore store = new();
     private readonly S3Service s3 = new();
+    private readonly FolderTransferService folders = new();
     private readonly FilePreviewService files = new();
     private readonly PreviewCache<CachedView> previewCache = new(view => PreviewMemory.Estimate(view.Result) + view.Sql.Length * 2L);
     private readonly List<ActionCommand> commands = [];
@@ -32,6 +33,7 @@ public sealed class MainViewModel : Observable
     private bool isBusy;
     private bool previewOpen;
     private bool isFileLoading;
+    private bool isExplorerLoading;
     private string loadingFileName = "";
     private string previewText = "";
     private bool isTextPreview;
@@ -61,6 +63,7 @@ public sealed class MainViewModel : Observable
     public bool IsIdle => !IsBusy;
     public bool IsPreviewOpen { get => previewOpen; private set { if (Set(ref previewOpen, value)) { Notify(nameof(IsTabularPreview)); RefreshCommands(); } } }
     public bool IsFileLoading { get => isFileLoading; private set => Set(ref isFileLoading, value); }
+    public bool IsExplorerLoading { get => isExplorerLoading; private set => Set(ref isExplorerLoading, value); }
     public string LoadingFileName { get => loadingFileName; private set => Set(ref loadingFileName, value); }
     public string PreviewText { get => previewText; private set => Set(ref previewText, value); }
     public bool IsTextPreview { get => isTextPreview; private set { if (Set(ref isTextPreview, value)) Notify(nameof(IsTabularPreview)); } }
@@ -117,7 +120,9 @@ public sealed class MainViewModel : Observable
             if (connected && !IsBusy && value is not null) _ = RunAsync("Cargando archivos…", async token => { prefix = ""; await ReloadAsync(token); });
         }
     }
-    public ObjectEntry? SelectedEntry { get => selectedEntry; set { if (Set(ref selectedEntry, value)) RefreshCommands(); } }
+    public ObjectEntry? SelectedEntry { get => selectedEntry; set { if (Set(ref selectedEntry, value)) { Notify(nameof(DownloadAction)); Notify(nameof(DeleteAction)); RefreshCommands(); } } }
+    public string DownloadAction => SelectedEntry?.IsFolder == true ? "Descargar carpeta (ZIP)" : "Descargar archivo";
+    public string DeleteAction => SelectedEntry?.IsFolder == true ? "Eliminar carpeta y su contenido" : "Eliminar archivo";
 
     public ActionCommand AddConnectionCommand { get; }
     public ActionCommand EditConnectionCommand { get; }
@@ -155,18 +160,18 @@ public sealed class MainViewModel : Observable
         }), () => CanBrowse() && prefix.Length > 0);
         NextPageCommand = Command(() => _ = RunAsync("Cargando página…", async token =>
         {
-            var target = nextToken; var page = await s3.ListAsync(SelectedProfile!, SelectedBucket!, prefix, target, token);
+            var target = nextToken; var page = await LoadPageAsync(SelectedProfile!, SelectedBucket!, prefix, target, token);
             if (pageTokens.Count > pageIndex + 1) pageTokens.RemoveRange(pageIndex + 1, pageTokens.Count - pageIndex - 1);
             pageTokens.Add(target); pageIndex++; SetPage(page);
         }), () => CanBrowse() && nextToken is not null);
         PreviousPageCommand = Command(() => _ = RunAsync("Cargando página…", async token =>
         {
-            var page = await s3.ListAsync(SelectedProfile!, SelectedBucket!, prefix, pageTokens[pageIndex - 1], token);
+            var page = await LoadPageAsync(SelectedProfile!, SelectedBucket!, prefix, pageTokens[pageIndex - 1], token);
             pageIndex--; SetPage(page);
         }), () => CanBrowse() && pageIndex > 0);
         UploadCommand = Command(ChooseUpload, CanBrowse);
-        DownloadCommand = Command(ChooseDownload, () => CanBrowse() && SelectedEntry is { IsFolder: false });
-        DeleteCommand = Command(DeleteFile, () => CanBrowse() && SelectedEntry is { IsFolder: false });
+        DownloadCommand = Command(ChooseDownload, () => CanBrowse() && SelectedEntry is not null);
+        DeleteCommand = Command(DeleteSelected, () => CanBrowse() && SelectedEntry is not null);
         PreviewCommand = Command(() => _ = PreviewSelectedAsync(), () => CanBrowse() && CanPreview(SelectedEntry));
         LocalPreviewCommand = Command(ChooseLocalPreview, () => IsIdle);
         CancelCommand = Command(() => operation?.Cancel(), () => IsBusy);
@@ -216,6 +221,7 @@ public sealed class MainViewModel : Observable
         InvalidateCache();
         connected = false; NotifyConnection();
         ClearPage(); ClearPreview(); Buckets.Clear(); selectedBucket = null; Notify(nameof(SelectedBucket)); NotifyLocation();
+        IsExplorerLoading = true;
         var buckets = await s3.ListBucketsAsync(SelectedProfile!, token);
         foreach (var bucket in buckets) Buckets.Add(bucket);
         connected = true; NotifyConnection(); selectedBucket = Buckets.FirstOrDefault(); Notify(nameof(SelectedBucket)); prefix = "";
@@ -226,8 +232,15 @@ public sealed class MainViewModel : Observable
     private async Task ReloadAsync(CancellationToken token)
     {
         ClearPreview(); ClearPage(); NotifyLocation();
-        var page = await s3.ListAsync(SelectedProfile!, SelectedBucket!, prefix, null, token); SetPage(page);
+        var page = await LoadPageAsync(SelectedProfile!, SelectedBucket!, prefix, null, token); SetPage(page);
         StartFolderCount(page);
+    }
+
+    private async Task<ObjectPage> LoadPageAsync(ConnectionProfile profile, string bucket, string folder, string? continuation, CancellationToken token)
+    {
+        IsExplorerLoading = true;
+        try { return await s3.ListAsync(profile, bucket, folder, continuation, token); }
+        finally { IsExplorerLoading = false; }
     }
 
     private void NotifyLocation() { Notify(nameof(Location)); Notify(nameof(FolderPath)); Notify(nameof(Breadcrumbs)); Notify(nameof(Ancestors)); }
@@ -405,6 +418,50 @@ public sealed class MainViewModel : Observable
         Notify(nameof(IsDarkTheme)); Notify(nameof(ThemeAction));
     }
 
+    private void DeleteSelected()
+    {
+        if (SelectedEntry is { IsFolder: true } folder) { _ = DeleteFolderAsync(folder); return; }
+        DeleteFile();
+    }
+
+    private async Task DeleteFolderAsync(ObjectEntry entry)
+    {
+        if (SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
+        await RunAsync("Revisando el contenido de la carpeta…", async token =>
+        {
+            using var plan = await folders.PrepareAsync(profile, bucket, entry.Key, token);
+            token.ThrowIfCancellationRequested();
+            if (MessageBox.Show(Application.Current.MainWindow,
+                $"¿Eliminar la carpeta «{entry.Name}» y sus {plan.Files:N0} archivos, incluidas todas sus subcarpetas?\n\nConexión: {profile.Name}\nRuta: s3://{bucket}/{entry.Key}\n\nSi cancelas durante la eliminación, lo ya eliminado no se restaura.",
+                "Eliminar carpeta y su contenido", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+            { Status = "Eliminación de carpeta cancelada."; return; }
+            InvalidateCache(); CancelFolderCount();
+            if (previewTarget is { } opened && opened.Profile?.Id == profile.Id && opened.Bucket == bucket && opened.Key.StartsWith(entry.Key, StringComparison.Ordinal)) ClearPreview();
+            try
+            {
+                var reporter = new Progress<FolderProgress>(value =>
+                { Progress = value.Percent; Status = $"Eliminando carpeta: {value.Completed:N0} de {value.Total:N0} objetos."; });
+                await folders.DeleteAsync(profile, plan, reporter, token);
+                Status = $"Carpeta eliminada: {entry.Name} · {plan.Files:N0} archivos.";
+            }
+            finally { await RefreshAfterFolderChangeAsync(profile, bucket); }
+        });
+    }
+
+    private async Task RefreshAfterFolderChangeAsync(ConnectionProfile profile, string bucket)
+    {
+        // Use a separate token to reflect completed batches even after a cancellation.
+        using var refresh = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var previousStatus = Status;
+        try
+        {
+            pageTokens.Clear(); pageTokens.Add(null); pageIndex = 0;
+            var page = await LoadPageAsync(profile, bucket, prefix, null, refresh.Token);
+            SetPage(page); StartFolderCount(page); Status = previousStatus;
+        }
+        catch { Status = previousStatus + " Pulsa Actualizar para renovar la lista."; }
+    }
+
     private void DeleteFile()
     {
         if (SelectedEntry is not { IsFolder: false } entry || SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
@@ -419,7 +476,7 @@ public sealed class MainViewModel : Observable
             if (previewTarget is { } opened && opened.Profile?.Id == profile.Id && opened.Bucket == bucket && opened.Key == entry.Key) ClearPreview();
             // Retain other open previews while refreshing this page after deletion.
             pageTokens.Clear(); pageTokens.Add(null); pageIndex = 0;
-            var page = await s3.ListAsync(profile, bucket, prefix, null, token); SetPage(page); StartFolderCount(page);
+            var page = await LoadPageAsync(profile, bucket, prefix, null, token); SetPage(page); StartFolderCount(page);
             Status = $"Archivo eliminado: {entry.Name}";
         });
     }
@@ -446,6 +503,7 @@ public sealed class MainViewModel : Observable
 
     private void ChooseDownload()
     {
+        if (SelectedEntry is { IsFolder: true } folder) { ChooseFolderDownload(folder); return; }
         if (SelectedEntry is not { IsFolder: false } entry) return;
         var dialog = new SaveFileDialog { FileName = System.IO.Path.GetFileName(entry.Name), Title = "Descargar archivo", OverwritePrompt = true };
         if (dialog.ShowDialog() != true) return;
@@ -453,6 +511,22 @@ public sealed class MainViewModel : Observable
         {
             await s3.DownloadAsync(SelectedProfile!, SelectedBucket!, entry.Key, dialog.FileName, new Progress<TransferProgress>(value => Progress = value.Percent), token);
             Status = $"Descarga terminada: {dialog.FileName}";
+        });
+    }
+
+    private void ChooseFolderDownload(ObjectEntry entry)
+    {
+        if (SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
+        var name = new string(entry.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character).ToArray());
+        var dialog = new SaveFileDialog { FileName = (name.Length > 0 ? name : "carpeta") + ".zip", Filter = "Archivo ZIP|*.zip", DefaultExt = ".zip", AddExtension = true, Title = "Descargar carpeta completa", OverwritePrompt = true };
+        if (dialog.ShowDialog() != true) return;
+        _ = RunAsync("Revisando archivos para descargar la carpeta…", async token =>
+        {
+            using var plan = await folders.PrepareAsync(profile, bucket, entry.Key, token);
+            var reporter = new Progress<FolderProgress>(value =>
+            { Progress = value.Percent; Status = $"Descargando carpeta: {value.Completed:N0} de {value.Total:N0} objetos · {ObjectEntry.FormatSize(value.Bytes)}."; });
+            await folders.DownloadZipAsync(profile, plan, dialog.FileName, reporter, token);
+            Status = $"Carpeta descargada: {dialog.FileName}";
         });
     }
 
@@ -467,7 +541,8 @@ public sealed class MainViewModel : Observable
             if (IsPreviewOpen) QueryError = exception.Message; else Error = exception.Message;
             Status = "La consulta no se completó. Se conserva el último resultado disponible.";
         }
-        catch (OperationCanceledException) { Status = "Operación cancelada. Las cargas ya terminadas se conservan."; }
+        catch (FolderTransferException exception) { Error = exception.Message; Status = "La operación de carpeta no se completó."; }
+        catch (OperationCanceledException) { Status = "Operación cancelada. Los cambios ya completados se conservan."; }
         catch (AmazonS3Exception exception)
         {
             Error = exception.StatusCode == System.Net.HttpStatusCode.Forbidden
@@ -481,7 +556,7 @@ public sealed class MainViewModel : Observable
             Error = exception is ArgumentException ? exception.Message : "La operación no se completó. Revisa la conexión, el formato del archivo y la disponibilidad de httpfs para tablas remotas.";
             Status = "La operación no se completó.";
         }
-        finally { operation = null; IsBusy = false; }
+        finally { operation = null; IsExplorerLoading = false; IsBusy = false; }
     }
 
     public void Cancel() => operation?.Cancel();

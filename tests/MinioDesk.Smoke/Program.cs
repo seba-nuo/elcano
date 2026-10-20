@@ -3,10 +3,12 @@ using DuckDB.NET.Data;
 using MinioDesk.Core;
 using System.Security.Cryptography;
 using System.Text;
+using System.IO.Compression;
 
 if (args.Length < 2) throw new ArgumentException("Uso: --local|--integration|--prepare-extensions DIRECTORIO");
 var directory = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(directory);
+if (args[0] == "--folder-protocol") { await FolderProtocolChecks.RunAsync(directory); return; }
 var parquet = new ParquetService(Path.Combine(directory, "extensions"));
 if (args[0] == "--prepare-extensions")
 {
@@ -118,6 +120,19 @@ Check(crumbs.Count == 6 && crumbs[^1].Prefix == "ventas/2026/México/octubre/dí
 var compact = FolderBreadcrumbs.Compact(crumbs);
 Check(compact.Count == 4 && compact[1].IsOverflow && compact[^1] == crumbs[^1], "Rutas profundas: resumen conserva los últimos niveles y acceso a antecesores");
 Check(FolderBreadcrumbs.Build("datos", "uno//tres/")[2].Prefix == "uno//", "Rutas: se conservan segmentos vacíos de las claves S3");
+var folders = new FolderTransferService();
+foreach (var invalidPrefix in new[] { "", "/", "////", "sin-barra-final" })
+{
+    try { await folders.PrepareAsync(profile, "demo", invalidPrefix, CancellationToken.None); throw new Exception("Se aceptó una operación de carpeta sobre una raíz o prefijo incompleto"); }
+    catch (ArgumentException) { Check(true, "Carpetas: se rechazan raíces y prefijos sin límite de carpeta"); }
+}
+foreach (var invalidZipName in new[] { "../escape.txt", "/absoluto.txt", "ruta\\escape.txt", "C:/escape.txt", "NUL.txt", "COM¹.txt", "CONOUT$", "ruta/archivo.", "ruta//archivo.txt" })
+{
+    try { FolderTransferService.ValidateZipName(invalidZipName); throw new Exception("Se aceptó una ruta ZIP incompatible"); }
+    catch (FolderTransferException) { Check(true, "ZIP: se rechazan rutas inseguras o incompatibles con Windows"); }
+}
+FolderTransferService.ValidateZipName("carpeta/México/李明.csv");
+Check(true, "ZIP: se admiten nombres Unicode y subcarpetas");
 if (args[0] != "--integration") return;
 
 var access = Environment.GetEnvironmentVariable("MINIODESK_TEST_ACCESS_KEY") ?? throw new Exception("Falta MINIODESK_TEST_ACCESS_KEY");
@@ -176,18 +191,90 @@ foreach (var endpoint in new[] { "http://localhost:9000", "http://localhost:9100
         Check((await s3.ListAsync(active, bucket, "pages/", null, CancellationToken.None)).Entries.Count == 200, $"{endpoint}: eliminar un archivo conserva los demás objetos");
         try { await s3.DeleteAsync(active, bucket, "pages/", CancellationToken.None); throw new Exception("Se permitió eliminar un prefijo"); }
         catch (ArgumentException) { Check(true, $"{endpoint}: no se eliminan carpetas desde la acción de archivo"); }
+
+        await Parallel.ForEachAsync(Enumerable.Range(0, 1003), new ParallelOptions { MaxDegreeOfParallelism = 6 }, async (index, token) =>
+            await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = $"tree/sub/{index:D4}_México.txt", ContentBody = "x" }, token));
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "tree/", ContentBody = "" });
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "tree/vacía/", ContentBody = "" });
+        await s3.UploadAsync(active, bucket, "tree/ventas.csv", csvPath, null, CancellationToken.None);
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "tree-extra/no-tocar.txt", ContentBody = "conservar" });
+        // MinIO cannot reliably list an object and a directory with the exact same name.
+        // The simulated S3 tests cover that namespace collision separately.
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "tree.txt", ContentBody = "conservar" });
+        using (var plan = await folders.PrepareAsync(active, bucket, "tree/", CancellationToken.None))
+        {
+            Check(plan.Files == 1004 && plan.Objects == 1006, $"{endpoint}: inventario recursivo paginado de más de mil objetos (archivos={plan.Files}, objetos={plan.Objects})");
+            var zipPath = Path.Combine(directory, "carpeta.zip");
+            await folders.DownloadZipAsync(active, plan, zipPath, null, CancellationToken.None);
+            using (var archive = ZipFile.OpenRead(zipPath))
+            {
+                Check(archive.Entries.Count(entry => !entry.FullName.EndsWith('/')) == 1004 && archive.GetEntry("tree/vacía/") is not null && archive.GetEntry("tree/sub/0000_México.txt") is not null,
+                    $"{endpoint}: ZIP conserva todos los archivos, subcarpetas vacías y nombres Unicode");
+                using var zipped = archive.GetEntry("tree/ventas.csv")!.Open();
+                Check(SHA256.HashData(zipped).SequenceEqual(SHA256.HashData(File.ReadAllBytes(csvPath))), $"{endpoint}: contenido ZIP íntegro");
+                Check(!archive.Entries.Any(entry => entry.FullName.StartsWith("tree-extra")), $"{endpoint}: la descarga respeta el límite exacto del prefijo");
+            }
+            var cancelZip = Path.Combine(directory, "cancel-folder.zip"); File.WriteAllText(cancelZip, "conservar archivo anterior");
+            using var downloadCancel = new CancellationTokenSource();
+            try
+            {
+                await folders.DownloadZipAsync(active, plan, cancelZip, new InlineProgress<FolderProgress>(value => { if (value.Bytes > 0) downloadCancel.Cancel(); }), downloadCancel.Token);
+                throw new Exception("Se ignoró la cancelación de la descarga de carpeta");
+            }
+            catch (OperationCanceledException) { }
+            Check(File.ReadAllText(cancelZip) == "conservar archivo anterior" && !Directory.GetFiles(directory, "*.part").Any(), $"{endpoint}: cancelar ZIP conserva el destino anterior y limpia los parciales");
+            using var deleteCancel = new CancellationTokenSource();
+            try
+            {
+                await folders.DeleteAsync(active, plan, new InlineProgress<FolderProgress>(value => { if (value.Completed >= 1000) deleteCancel.Cancel(); }), deleteCancel.Token);
+                throw new Exception("Se ignoró la cancelación de la eliminación recursiva");
+            }
+            catch (OperationCanceledException) { }
+            using var remaining = await folders.PrepareAsync(active, bucket, "tree/", CancellationToken.None);
+            Check(remaining.Objects == 6, $"{endpoint}: cancelación entre lotes conserva los objetos aún no eliminados");
+            await folders.DeleteAsync(active, remaining, null, CancellationToken.None);
+        }
+        using (var empty = await folders.PrepareAsync(active, bucket, "tree/", CancellationToken.None))
+            Check(empty.Objects == 0, $"{endpoint}: eliminación de toda la carpeta y sus marcadores");
+        Check((await client.GetObjectMetadataAsync(bucket, "tree-extra/no-tocar.txt")).ContentLength == 9 && (await client.GetObjectMetadataAsync(bucket, "tree.txt")).ContentLength == 9,
+            $"{endpoint}: eliminar una carpeta conserva archivos y prefijos vecinos");
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "unsafe/NUL.txt", ContentBody = "x" });
+        using (var unsafePlan = await folders.PrepareAsync(active, bucket, "unsafe/", CancellationToken.None))
+        {
+            var unsafeZip = Path.Combine(directory, "unsafe.zip");
+            try { await folders.DownloadZipAsync(active, unsafePlan, unsafeZip, null, CancellationToken.None); throw new Exception("Se permitió una entrada ZIP con un nombre reservado de Windows"); }
+            catch (FolderTransferException) { Check(!File.Exists(unsafeZip) && !Directory.GetFiles(directory, "*.part").Any(), $"{endpoint}: ZIP inseguro rechazado sin dejar un archivo parcial"); }
+            await folders.DeleteAsync(active, unsafePlan, null, CancellationToken.None);
+        }
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "conflict/A.txt", ContentBody = "A" });
+        await client.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = "conflict/a.txt", ContentBody = "a" });
+        using (var conflictPlan = await folders.PrepareAsync(active, bucket, "conflict/", CancellationToken.None))
+        {
+            try { await folders.DownloadZipAsync(active, conflictPlan, Path.Combine(directory, "conflict.zip"), null, CancellationToken.None); throw new Exception("Se ignoró una colisión de nombres de Windows"); }
+            catch (FolderTransferException) { Check(true, $"{endpoint}: se rechazan colisiones de mayúsculas sin perder archivos"); }
+            await folders.DeleteAsync(active, conflictPlan, null, CancellationToken.None);
+        }
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Fallo de integración en {endpoint}: {exception}");
+        throw;
     }
     finally
     {
         // Only clean the unique bucket created above by this test.
-        string? continuation = null;
-        do
+        while (true)
         {
-            var objects = await client.ListObjectsV2Async(new ListObjectsV2Request { BucketName = bucket, ContinuationToken = continuation });
-            continuation = objects.IsTruncated == true ? objects.NextContinuationToken : null;
+            var objects = await client.ListObjectsV2Async(new ListObjectsV2Request { BucketName = bucket });
+            if (objects.S3Objects is not { Count: > 0 }) break;
             foreach (var item in objects.S3Objects ?? []) await client.DeleteObjectAsync(bucket, item.Key);
-        } while (continuation is not null);
+        }
         await client.DeleteBucketAsync(bucket);
     }
 }
 Console.WriteLine("Pruebas de integración terminadas en los dos servidores.");
+
+internal sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+{
+    public void Report(T value) => report(value);
+}
