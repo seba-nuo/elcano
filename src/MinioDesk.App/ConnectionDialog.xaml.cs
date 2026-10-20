@@ -11,6 +11,7 @@ public partial class ConnectionDialog : Window
     public ConnectionDialog(ConnectionProfile? existing)
     {
         InitializeComponent();
+        ThemeManager.Attach(this);
         id = existing?.Id ?? Guid.NewGuid();
         DialogHeading.Text = existing is null ? "Nueva conexión" : "Editar conexión";
         NameInput.Text = existing?.Name ?? "";

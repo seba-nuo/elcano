@@ -41,6 +41,7 @@ public sealed record ObjectEntry(string Key, string Name, bool IsFolder, long Si
 }
 
 public sealed record ObjectPage(IReadOnlyList<ObjectEntry> Entries, string? NextToken);
+public sealed record FolderTotals(long Files, long Folders, long Pages);
 public sealed record TransferProgress(long Done, long Total)
 {
     public double Percent => Total > 0 ? Math.Min(100, 100d * Done / Total) : 0;

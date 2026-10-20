@@ -61,6 +61,29 @@ public sealed class S3Service
         await transfer.UploadAsync(request, cancellationToken);
     }
 
+    public async Task<FolderTotals> CountFolderAsync(ConnectionProfile profile, string bucket, string prefix, CancellationToken token)
+    {
+        using var client = CreateClient(profile);
+        long files = 0, folders = 0, listed = 0;
+        string? continuation = null;
+        do
+        {
+            var page = await client.ListObjectsV2Async(new ListObjectsV2Request
+            { BucketName = bucket, Prefix = prefix, Delimiter = "/", MaxKeys = 1000, ContinuationToken = continuation }, token);
+            token.ThrowIfCancellationRequested();
+            var objects = page.S3Objects ?? [];
+            var prefixes = page.CommonPrefixes ?? [];
+            files += objects.LongCount(item => item.Key != prefix);
+            folders += prefixes.Count;
+            // Include the current folder marker: it also consumes a listing slot.
+            listed += objects.Count + prefixes.Count;
+            continuation = page.IsTruncated == true ? page.NextContinuationToken : null;
+            if (page.IsTruncated == true && string.IsNullOrEmpty(continuation))
+                throw new InvalidDataException("El servidor no devolvió un token para continuar el recuento.");
+        } while (continuation is not null);
+        return new FolderTotals(files, folders, Math.Max(1, (listed + 199) / 200));
+    }
+
     public async Task DownloadAsync(ConnectionProfile profile, string bucket, string key, string path,
         IProgress<TransferProgress>? progress, CancellationToken cancellationToken)
     {
@@ -87,5 +110,13 @@ public sealed class S3Service
             File.Move(temporary, path, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    public async Task DeleteAsync(ConnectionProfile profile, string bucket, string key, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(key) || key.EndsWith('/'))
+            throw new ArgumentException("Selecciona un archivo; no se eliminan carpetas ni prefijos.");
+        using var client = CreateClient(profile);
+        await client.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = key }, cancellationToken);
     }
 }

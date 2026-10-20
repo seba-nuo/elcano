@@ -2,18 +2,22 @@ using Amazon.S3.Model;
 using DuckDB.NET.Data;
 using MinioDesk.Core;
 using System.Text.Json;
+using System.Text;
 
 if (args.Length < 4) throw new ArgumentException("Uso: DIRECTORIO BUCKET REGION ENDPOINT [ENDPOINT...]");
 var output = Path.GetFullPath(args[0]);
 var bucket = args[1];
 var region = args[2];
-var endpoints = args[3..];
+var paginationIndex = Array.IndexOf(args, "--pagination");
+var paginationFiles = paginationIndex >= 0 ? int.Parse(args[paginationIndex + 1]) : 0;
+if (paginationFiles is < 0 or > 2000) throw new ArgumentException("Usa entre 0 y 2000 ejemplos de paginación.");
+var endpoints = args[3..(paginationIndex >= 0 ? paginationIndex : args.Length)];
 var access = Environment.GetEnvironmentVariable("MINIODESK_SAMPLE_ACCESS_KEY") ?? throw new ArgumentException("Falta MINIODESK_SAMPLE_ACCESS_KEY.");
 var secret = Environment.GetEnvironmentVariable("MINIODESK_SAMPLE_SECRET_KEY") ?? throw new ArgumentException("Falta MINIODESK_SAMPLE_SECRET_KEY.");
 var prefix = "muestras-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6] + "/";
 Directory.CreateDirectory(output);
 var s3 = new S3Service();
-var parquet = new ParquetService(Path.Combine(output, "extensions"));
+var files = new FilePreviewService(Path.Combine(output, "extensions"));
 var manifest = new List<SampleManifest>();
 
 // Deterministic synthetic data only; no personal data or production files are read.
@@ -92,7 +96,7 @@ foreach (var endpoint in endpoints)
         if (Convert.ToInt64(command.ExecuteScalar()) != sample.RowCount) throw new InvalidDataException("Cantidad de filas incorrecta.");
         var key = prefix + sample.Name;
         await s3.UploadAsync(profile, bucket, key, local, null, CancellationToken.None);
-        var preview = await parquet.PreviewRemoteAsync(profile, bucket, key, CancellationToken.None);
+        var preview = await files.PreviewRemoteAsync(profile, bucket, key, CancellationToken.None);
         if (preview.Rows.Rows.Count != Math.Min(200, sample.RowCount) || preview.Schema.Rows.Count == 0)
             throw new InvalidDataException("La vista previa remota no coincide con el ejemplo.");
         if (sample.RowCount > 0)
@@ -103,6 +107,43 @@ foreach (var endpoint in endpoints)
         }
         manifest.Add(new SampleManifest(endpoint, bucket, key, sample.RowCount, preview.Schema.Rows.Count, new FileInfo(local).Length));
         Console.WriteLine($"OK {endpoint} -> s3://{bucket}/{key} | {sample.RowCount:N0} filas | {preview.Schema.Rows.Count} columnas");
+    }
+    var csv = Path.Combine(localDirectory, "06_ventas.csv");
+    var semicolon = Path.Combine(localDirectory, "07_clientes.csv");
+    var txt = Path.Combine(localDirectory, "08_notas.txt");
+    await File.WriteAllTextAsync(csv, "id,pais,importe\n1,México,120.50\n2,Colombia,89.90\n3,Perú,215.00\n", new UTF8Encoding(true));
+    await File.WriteAllTextAsync(semicolon, "id;nombre;ciudad\n1;\"José; Muñoz\";\"Ciudad de México\"\n2;\"李明\";Lima\n", Encoding.UTF8);
+    await File.WriteAllTextAsync(txt, $"Ejemplos de MinioDesk\nServidor: {endpoint}\n\nTexto con acentos: áéíóú ñ.\nCaracteres Unicode: 李明.\n\nCSV y Parquet permiten consultas sobre la tabla archivo.\n", Encoding.UTF8);
+    foreach (var local in new[] { csv, semicolon, txt })
+    {
+        var key = prefix + Path.GetFileName(local);
+        await s3.UploadAsync(profile, bucket, key, local, null, CancellationToken.None);
+        var preview = await files.PreviewRemoteAsync(profile, bucket, key, CancellationToken.None);
+        manifest.Add(new SampleManifest(endpoint, bucket, key, preview.Rows.Rows.Count, preview.Schema.Rows.Count, new FileInfo(local).Length));
+        Console.WriteLine($"OK {endpoint} -> s3://{bucket}/{key}");
+    }
+    if (paginationFiles > 0)
+    {
+        var pagingPrefix = prefix + "paginacion/";
+        var tinyParquet = Path.Combine(localDirectory, "paginacion.parquet");
+        command.CommandText = $"COPY (SELECT i + 1 AS id, 'México' AS pais, i * 12.5 AS importe FROM range(5) t(i)) TO {ParquetService.Literal(tinyParquet.Replace('\\', '/'))} (FORMAT PARQUET);";
+        command.ExecuteNonQuery();
+        var sources = new[] { tinyParquet, csv, txt };
+        await Parallel.ForEachAsync(Enumerable.Range(1, paginationFiles), new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (index, token) =>
+        {
+            var source = sources[(index - 1) % sources.Length];
+            var key = $"{pagingPrefix}{index:D4}_ejemplo{Path.GetExtension(source)}";
+            await s3.UploadAsync(profile, bucket, key, source, null, token);
+        });
+        var count = 0; var pages = new List<int>(); string? continuation = null;
+        do
+        {
+            var page = await s3.ListAsync(profile, bucket, pagingPrefix, continuation, CancellationToken.None);
+            pages.Add(page.Entries.Count); count += page.Entries.Count; continuation = page.NextToken;
+        } while (continuation is not null);
+        if (count != paginationFiles) throw new InvalidDataException("No coincide el número de objetos de paginación.");
+        Console.WriteLine($"PAGINACIÓN OK {endpoint} -> s3://{bucket}/{pagingPrefix} | {count} archivos | páginas: {string.Join(" + ", pages)}");
+        manifest.Add(new SampleManifest(endpoint, bucket, pagingPrefix, count, 0, 0));
     }
 }
 var manifestPath = Path.Combine(output, "manifest.json");

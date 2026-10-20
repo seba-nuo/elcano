@@ -1,10 +1,11 @@
 using System.Data;
 using System.IO.Compression;
 using DuckDB.NET.Data;
+using DuckDB.NET.Native;
 
 namespace MinioDesk.Core;
 
-public sealed record ParquetPreview(DataTable Rows, DataTable Schema, string Source);
+public sealed record ParquetPreview(DataTable Rows, DataTable Schema, string Source, string? Text = null, bool IsTruncated = false);
 
 public sealed class ParquetService
 {
@@ -13,20 +14,28 @@ public sealed class ParquetService
     public ParquetService(string? directory = null) => extensionDirectory = directory ?? Path.Combine(new ProfileStore().DirectoryPath, "extensions");
 
     public async Task<ParquetPreview> PreviewRemoteAsync(ConnectionProfile profile, string bucket, string key, CancellationToken token)
+        => await QueryRemoteAsync(profile, bucket, key, ParquetQuery.Default, token);
+
+    public async Task<ParquetPreview> QueryRemoteAsync(ConnectionProfile profile, string bucket, string key, string query, CancellationToken token)
     {
         profile.Validate();
         if (key.IndexOfAny(['*', '?', '[', ']']) >= 0)
-            throw new ArgumentException("Para previsualizar esta clave con caracteres de patrón, descarga el archivo y usa Abrir Parquet local.");
+            throw new ArgumentException("Para previsualizar esta clave con caracteres de patrón, descarga el archivo y usa Abrir archivo local.");
         // One query at a time; each isolated database has exactly one endpoint/secret.
+        query = ParquetQuery.Normalize(query);
         await gate.WaitAsync(token);
-        try { return await Task.Run(() => ReadPreview(profile, bucket, key, token), token); }
+        try { return await Task.Run(() => ReadPreview(profile, bucket, key, query, token), token); }
         finally { gate.Release(); }
     }
 
     public async Task<ParquetPreview> PreviewLocalAsync(string path, CancellationToken token)
+        => await QueryLocalAsync(path, ParquetQuery.Default, token);
+
+    public async Task<ParquetPreview> QueryLocalAsync(string path, string query, CancellationToken token)
     {
+        query = ParquetQuery.Normalize(query);
         await gate.WaitAsync(token);
-        try { return await Task.Run(() => ReadPreview(null, "", Path.GetFullPath(path), token), token); }
+        try { return await Task.Run(() => ReadPreview(null, "", Path.GetFullPath(path), query, token), token); }
         finally { gate.Release(); }
     }
 
@@ -91,7 +100,7 @@ public sealed class ParquetService
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private ParquetPreview ReadPreview(ConnectionProfile? profile, string bucket, string key, CancellationToken token)
+    private ParquetPreview ReadPreview(ConnectionProfile? profile, string bucket, string key, string query, CancellationToken token)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
@@ -121,32 +130,30 @@ public sealed class ParquetService
             }
             else source = key.Replace('\\', '/');
 
-            var scan = $"read_parquet({Literal(source)}, file_row_number=false)";
+            var isCsv = Path.GetExtension(key).Equals(".csv", StringComparison.OrdinalIgnoreCase);
+            var scan = isCsv
+                ? $"read_csv({Literal(source)}, auto_detect=true, sample_size=2048, maximum_line_size=1048576, buffer_size=4194304, parallel=false)"
+                : $"read_parquet({Literal(source)}, file_row_number=false)";
             command.CommandText = "SET enable_external_file_cache=false;";
             command.ExecuteNonQuery();
-            command.CommandText = $"DESCRIBE SELECT * FROM {scan};";
-            var schema = new DataTable();
-            schema.Columns.Add("Columna"); schema.Columns.Add("Tipo"); schema.Columns.Add("Nulos");
-            var names = new List<string>();
-            using (var reader = command.ExecuteReader())
-            {
-                while (reader.Read())
-                {
-                    token.ThrowIfCancellationRequested();
-                    var name = reader.GetString(0);
-                    schema.Rows.Add(name, reader.GetString(1), reader.GetString(2));
-                    if (names.Count < 64) names.Add(name);
-                }
-            }
+            command.CommandText = $"CREATE TEMP VIEW archivo AS SELECT * FROM {scan}; CREATE TEMP VIEW parquet AS SELECT * FROM archivo;";
+            command.ExecuteNonQuery();
+            var schema = Describe(command, "SELECT * FROM archivo", token);
+            // Allow reading only the selected object/file after initializing its view.
+            command.CommandText = $"SET allowed_paths=[{Literal(source)}]; SET enable_external_access=false; SET lock_configuration=true;";
+            command.ExecuteNonQuery();
             token.ThrowIfCancellationRequested();
-            var projection = string.Join(", ", names.Select(name => $"left(CAST({Identifier(name)} AS VARCHAR), 512) AS {Identifier(name)}"));
-            command.CommandText = $"SELECT {projection} FROM {scan} LIMIT 200;";
-            command.UseStreamingMode = true;
-            var rows = new DataTable();
-            // Stable internal names avoid WPF binding issues with punctuation in Parquet column names.
-            for (var index = 0; index < names.Count; index++) rows.Columns.Add($"c{index}", typeof(string)).Caption = names[index];
-            using (var reader = command.ExecuteReader())
+            try
             {
+                using (var statements = ExtractSingle(connection, query)) { }
+                var resultSchema = Describe(command, $"SELECT * FROM (\n{query}\n) AS result", token);
+                var names = resultSchema.Rows.Cast<DataRow>().Take(64).Select(row => (string)row[0]).ToArray();
+                var projection = string.Join(", ", names.Select(name => $"left(CAST({Identifier(name)} AS VARCHAR), 512) AS {Identifier(name)}"));
+                command.CommandText = $"SELECT {projection} FROM (\n{query}\n) AS result LIMIT 200;";
+                command.UseStreamingMode = true;
+                var rows = new DataTable();
+                for (var index = 0; index < names.Length; index++) rows.Columns.Add($"c{index}", typeof(string)).Caption = names[index];
+                using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     token.ThrowIfCancellationRequested();
@@ -154,10 +161,38 @@ public sealed class ParquetService
                     reader.GetValues(values);
                     rows.Rows.Add(values);
                 }
+                return new ParquetPreview(rows, schema, source);
             }
-            return new ParquetPreview(rows, schema, source);
+            catch (DuckDBException exception) when (!token.IsCancellationRequested)
+            {
+                var message = exception.Message;
+                if (profile is not null)
+                {
+                    message = message.Replace(profile.SecretKey, "[oculto]", StringComparison.Ordinal)
+                        .Replace(profile.AccessKey, "[oculto]", StringComparison.Ordinal);
+                }
+                throw new ParquetQueryException(message.Length > 1600 ? message[..1600] : message);
+            }
         }
         catch when (token.IsCancellationRequested) { throw new OperationCanceledException(token); }
+    }
+
+    private static DataTable Describe(DuckDBCommand command, string query, CancellationToken token)
+    {
+        command.CommandText = $"DESCRIBE {query};";
+        var table = new DataTable();
+        table.Columns.Add("Columna"); table.Columns.Add("Tipo"); table.Columns.Add("Nulos");
+        using var reader = command.ExecuteReader();
+        while (reader.Read()) { token.ThrowIfCancellationRequested(); table.Rows.Add(reader.GetString(0), reader.GetString(1), reader.GetString(2)); }
+        return table;
+    }
+
+    private static DuckDBExtractedStatements ExtractSingle(DuckDBConnection connection, string sql)
+    {
+        var count = NativeMethods.ExtractStatements.DuckDBExtractStatements(connection.NativeConnection, sql, out var statements);
+        if (count == 1) return statements;
+        statements.Dispose();
+        throw new ParquetQueryException("Usa una sola consulta SELECT o WITH con sintaxis válida.");
     }
 
     public static string Literal(string value) => "'" + value.Replace("'", "''") + "'";

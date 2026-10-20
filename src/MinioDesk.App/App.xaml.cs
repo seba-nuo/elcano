@@ -11,10 +11,12 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        if (e.Args.Length == 2 && e.Args[0] is "--render-preview" or "--render-empty-preview" or "--render-connection-preview")
+        ThemeManager.Initialize();
+        if (e.Args.Length == 2 && e.Args[0] is "--render-preview" or "--render-empty-preview" or "--render-connection-preview" or "--render-dark-preview" or "--render-dark-connection-preview")
         {
+            ThemeManager.Apply(e.Args[0].Contains("dark", StringComparison.Ordinal));
             Window previewWindow;
-            if (e.Args[0] == "--render-connection-preview") previewWindow = new ConnectionDialog(null);
+            if (e.Args[0].EndsWith("connection-preview", StringComparison.Ordinal)) previewWindow = new ConnectionDialog(null);
             else
             {
                 var preview = new MainWindow();

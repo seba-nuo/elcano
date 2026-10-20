@@ -8,7 +8,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <ProjectReference Include="../MinioDesk.Core/MinioDesk.Core.csproj" />
     <Content Include="../../.local/runtime-extensions/httpfs.duckdb_extension" Condition="Exists('../../.local/runtime-extensions/httpfs.duckdb_extension')" Link="extensions/httpfs.duckdb_extension" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses/AvalonEdit.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
