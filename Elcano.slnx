@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Elcano.Core/Elcano.Core.csproj" />
+    <Project Path="src/Elcano.App/Elcano.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Elcano.Smoke/Elcano.Smoke.csproj" />
+    <Project Path="tests/Elcano.UiTests/Elcano.UiTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Elcano.Samples/Elcano.Samples.csproj" />
+  </Folder>
+</Solution>

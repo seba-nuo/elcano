@@ -1,6 +1,12 @@
 # Para qué sirve la carpeta scripts
 
-Contiene atajos de PowerShell para **desarrollar, probar y distribuir** MinioDesk. No son servicios en segundo plano ni se ejecutan al abrir el cliente portable. Si solo quieres usar la aplicación, abre `artifacts/MinioDesk-win-x64/MinioDesk.exe`.
+Contiene atajos de PowerShell para **desarrollar, probar y distribuir** Elcano. No son servicios en segundo plano ni se ejecutan al abrir el cliente portable. Si solo quieres usar la aplicación, abre `artifacts/Elcano-win-x64/Elcano.exe`.
+
+`publish.ps1` llama a `verify-licenses.ps1` antes de generar el ZIP. Comprueba
+que el portable incluya la licencia MIT, los avisos de terceros y los documentos
+inventariados, y que sus dependencias y binarios nativos correspondan a las
+versiones revisadas. También puedes ejecutarlo directamente con
+`./scripts/verify-licenses.ps1 -PublishedDirectory artifacts/Elcano-win-x64`.
 
 Ejecuta los comandos desde la raíz del repositorio:
 
@@ -9,6 +15,7 @@ Ejecuta los comandos desde la raíz del repositorio:
 | `common.ps1` | Configura el SDK local o instalado, las cachés de NuGet y la función que comprueba errores de `dotnet`. Lo cargan los otros scripts. | No hace falta ejecutarlo por separado. |
 | `run.ps1` | Compila si hay cambios y abre la aplicación WPF en modo Release. | `.\scripts\run.ps1` |
 | `publish.ps1` | Prepara `httpfs`, genera la carpeta portable de Windows x64, un ZIP y su SHA-256. Acepta `-OutputDirectory`, `-PackageVersion` y `-NoRestore` para una solución ya compilada. | `.\scripts\publish.ps1` |
+| `verify-licenses.ps1` | Verifica versiones, binarios nativos y licencias incluidas en una carpeta portable. Lo ejecuta también `publish.ps1`. | `.\scripts\verify-licenses.ps1 -PublishedDirectory artifacts/Elcano-win-x64` |
 | `test.ps1` | Comprueba perfiles cifrados, Parquet, CSV, TXT y caché. Con `-FolderProtocol`, prueba ZIP, paginación, eliminación recursiva, cancelación y errores parciales contra un S3 simulado local. Con `-Integration`, prueba los dos MinIO locales usando buckets temporales que elimina al terminar. | `.\scripts\test.ps1`, `.\scripts\test.ps1 -FolderProtocol` o `.\scripts\test.ps1 -Integration` |
 | `seed-samples.ps1` | Genera cinco Parquet, dos CSV y un TXT sintéticos por servidor; los sube y verifica su vista previa. Con `-PaginationFiles` añade objetos para probar páginas. | `.\scripts\seed-samples.ps1 -UseLocalLabCredentials` |
 
@@ -18,7 +25,7 @@ Las cachés, archivos generados y copias locales de los ejemplos se guardan bajo
 
 ## Ejemplos Parquet persistentes
 
-El generador usa por defecto `http://localhost:9000` y `http://localhost:9100`, con región `us-east-1`. Crea el bucket **`miniodesk-demo`** si aún no existe. Cada ejecución crea una carpeta `muestras-FECHA-HORA-ID/` diferente para conservar los ejemplos de ejecuciones anteriores.
+El generador usa por defecto `http://localhost:9000` y `http://localhost:9100`, con región `us-east-1`. Crea el bucket **`elcano-demo`** si aún no existe. Cada ejecución crea una carpeta `muestras-FECHA-HORA-ID/` diferente para conservar los ejemplos de ejecuciones anteriores.
 
 | Archivo | Filas | Qué permite probar |
 | --- | ---: | --- |
@@ -43,6 +50,6 @@ Se crean en **muestras-FECHA-HORA-ID/paginacion/**, alternando Parquet, CSV y TX
 
 Con `-UseLocalLabCredentials`, el script lee únicamente `MINIO_ROOT_USER` y `MINIO_ROOT_PASSWORD` de `.local/minio-lab/.env`. No muestra esas claves y restaura las variables de entorno anteriores al finalizar. No ejecuta el contenido del `.env`.
 
-Para usar otras credenciales, define `MINIODESK_SAMPLE_ACCESS_KEY` y `MINIODESK_SAMPLE_SECRET_KEY` en tu sesión y omite ese modificador. Puedes indicar `-Endpoints`, `-Bucket` y `-Region`. Estas operaciones necesitan permisos para listar buckets, crear el bucket si no existe, subir objetos y leerlos.
+Para usar otras credenciales, define `ELCANO_SAMPLE_ACCESS_KEY` y `ELCANO_SAMPLE_SECRET_KEY` en tu sesión y omite ese modificador. Puedes indicar `-Endpoints`, `-Bucket` y `-Region`. Estas operaciones necesitan permisos para listar buckets, crear el bucket si no existe, subir objetos y leerlos.
 
-En MinioDesk: conecta el servidor, selecciona **miniodesk-demo**, entra en la carpeta **muestras-…** y haz doble clic en un Parquet. Si el bucket se creó después de conectar, vuelve a pulsar **Conectar** para recargar la lista de buckets.
+En Elcano: conecta el servidor, selecciona **elcano-demo**, entra en la carpeta **muestras-…** y haz doble clic en un Parquet. Si el bucket se creó después de conectar, vuelve a pulsar **Conectar** para recargar la lista de buckets.

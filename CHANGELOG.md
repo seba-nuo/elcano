@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 0.2.1
+
+- Nuevo nombre **Elcano**, inspirado en Juan Sebastián Elcano: interfaz, ejecutable, solución, proyectos, scripts y paquetes portables actualizados.
+- Importación de conexiones y preferencias de la versión anterior para el mismo usuario de Windows, conservando los originales y sin sobrescribir la configuración nueva.
+- Descripción de la aplicación como cliente independiente compatible con MinIO y S3.
+- Licencia MIT para el código propio y documentos de licencia y atribución para las dependencias .NET y nativas.
+- Verificación de versiones, binarios nativos y documentos legales antes de generar el ZIP portable.
+
 ## 0.2.0
 
 - Caché limitada de carpetas, páginas y recuentos, con precarga gradual y opción para desactivarla.

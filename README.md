@@ -1,6 +1,8 @@
-# MinioDesk
+# Elcano
 
-Aplicación de escritorio para **Windows** que permite conectarse a **MinIO**, explorar archivos, subir y descargar objetos y visualizar archivos **Parquet, CSV y TXT**. Está desarrollada en C# con WPF y utiliza DuckDB integrado para consultar tablas.
+Aplicación de escritorio independiente para **Windows**, compatible con **MinIO** y la API S3, que permite explorar archivos, subir y descargar objetos y visualizar archivos **Parquet, CSV y TXT**. Está desarrollada en C# con WPF y utiliza DuckDB integrado para consultar tablas.
+
+El nombre está inspirado en el navegante [Juan Sebastián Elcano](https://www.memoriachilena.gob.cl/602/w3-article-95058.html). Elcano no está afiliado, patrocinado ni respaldado por MinIO, Inc. MinIO es una marca de MinIO, Inc.
 
 ## Funcionalidades
 
@@ -13,6 +15,13 @@ Aplicación de escritorio para **Windows** que permite conectarse a **MinIO**, e
 - Consultar Parquet y CSV remotos o locales con SQL, vista previa y autocompletado de columnas.
 - Abrir TXT como texto y reutilizar vistas recientes mediante una caché limitada en memoria.
 - Alternar entre tema claro y oscuro, con la preferencia guardada en el equipo.
+
+## Licencia y dependencias
+
+El código propio de Elcano se distribuye bajo [MIT](LICENSE). Las bibliotecas
+de terceros conservan sus propias licencias y avisos, incluidos en
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) y en [licenses/](licenses/README.md).
+Conserva esos documentos al distribuir la carpeta portable completa.
 
 ## Requisitos para usar la aplicación
 
@@ -30,10 +39,10 @@ La memoria necesaria depende de los archivos consultados. La vista previa limita
 
 ## Ejecutar la aplicación portable
 
-1. Obtén la carpeta **MinioDesk-win-x64**, generada mediante los pasos de publicación de este README.
+1. Obtén la carpeta **Elcano-win-x64**, generada mediante los pasos de publicación de este README.
 2. Si se distribuye como ZIP, extrae todo su contenido en una carpeta del equipo.
-3. Mantén juntos **MinioDesk.exe**, las DLL y la carpeta **extensions**.
-4. Abre **MinioDesk.exe**.
+3. Mantén juntos **Elcano.exe**, las DLL, la carpeta **extensions**, **LICENSE**, **THIRD-PARTY-NOTICES.md** y la carpeta **licenses**.
+4. Abre **Elcano.exe**.
 
 Debes copiar la carpeta completa, no únicamente el ejecutable. La distribución actual es portable y no incluye un instalador ni actualización automática.
 
@@ -152,7 +161,7 @@ Requisitos adicionales de desarrollo:
 - Internet para restaurar las dependencias de NuGet y preparar la extensión **httpfs**.
 - Una copia del repositorio, obtenida mediante Git o descargada como ZIP.
 
-Abre PowerShell en la carpeta que contiene **MinioDesk.slnx** y comprueba que aparece un SDK **10.0.x**:
+Abre PowerShell en la carpeta que contiene **Elcano.slnx** y comprueba que aparece un SDK **10.0.x**:
 
 ~~~powershell
 dotnet --list-sdks
@@ -177,12 +186,18 @@ Desde la raíz del repositorio:
 El script prepara **httpfs** y genera la distribución autocontenida en:
 
 ~~~text
-artifacts/MinioDesk-win-x64/
+artifacts/Elcano-win-x64/
 ~~~
 
-Copia **toda esa carpeta** al otro equipo o comprímela como ZIP. El usuario final abre **MinioDesk.exe** y configura sus propias conexiones; no necesita instalar .NET por separado.
+Copia **toda esa carpeta** al otro equipo o comprímela como ZIP. El usuario final abre **Elcano.exe** y configura sus propias conexiones; no necesita instalar .NET por separado.
 
-El script también genera **artifacts/MinioDesk-win-x64.zip** y su suma **SHA-256**. Para una versión concreta puedes usar `-PackageVersion 0.2.0` y para otra carpeta de salida `-OutputDirectory artifacts/MinioDesk-0.2.0-win-x64`. Si la publicación está abierta, utiliza otra carpeta o cierra esa instancia antes de actualizarla.
+El script también genera **artifacts/Elcano-win-x64.zip** y su suma **SHA-256**. Para una versión concreta puedes usar `-PackageVersion 0.2.1` y para otra carpeta de salida `-OutputDirectory artifacts/Elcano-0.2.1-win-x64`. Si la publicación está abierta, utiliza otra carpeta o cierra esa instancia antes de actualizarla.
+
+Antes de generar el ZIP, comprueba las versiones revisadas, las sumas de los
+binarios nativos y la presencia e integridad de las licencias. Si una dependencia
+cambia, actualiza sus avisos y el inventario siguiendo [licenses/README.md](licenses/README.md).
+El runtime autocontenido está fijado en .NET 10.0.13 para mantener el paquete
+coherente con los documentos revisados.
 
 La publicación actual está dirigida a Windows x64. No se generan paquetes para Windows de 32 bits ni una compilación nativa ARM64.
 
@@ -190,10 +205,10 @@ La publicación actual está dirigida a Windows x64. No se generan paquetes para
 
 | Ruta | Contenido |
 | --- | --- |
-| src/MinioDesk.App/ | Ventanas WPF y estado de la interfaz. |
-| src/MinioDesk.Core/ | Perfiles, cifrado, operaciones S3, caché y lectura de archivos. |
-| tests/MinioDesk.Smoke/ | Comprobaciones del cliente. |
-| tools/MinioDesk.Samples/ | Utilidad opcional para generar datos sintéticos. |
+| src/Elcano.App/ | Ventanas WPF y estado de la interfaz. |
+| src/Elcano.Core/ | Perfiles, cifrado, operaciones S3, caché y lectura de archivos. |
+| tests/Elcano.Smoke/ | Comprobaciones del cliente. |
+| tools/Elcano.Samples/ | Utilidad opcional para generar datos sintéticos. |
 | scripts/ | Atajos de desarrollo, pruebas y publicación. |
 
 Comandos principales:
@@ -219,23 +234,25 @@ Los scripts guardan sus herramientas y cachés en **.local/**, excluido de Git. 
 
 ## Configuración y credenciales
 
+Al abrir Elcano, se copian automáticamente las conexiones, el tema y la preferencia de precarga de **%LOCALAPPDATA%\MinioDesk** cuando el archivo correspondiente aún no existe en **%LOCALAPPDATA%\Elcano**. Los originales se conservan y la configuración ya existente de Elcano tiene prioridad. Las credenciales siguen cifradas para el mismo usuario de Windows; no se copian los diagnósticos ni la caché de extensiones.
+
 Los perfiles se guardan en:
 
 ~~~text
-%LOCALAPPDATA%\MinioDesk\connections.json
+%LOCALAPPDATA%\Elcano\connections.json
 ~~~
 
 Los nombres, endpoints, región y bucket se guardan como metadatos. Las claves de acceso se cifran con DPAPI para el usuario actual de Windows. Cada usuario o equipo debe configurar sus propias credenciales; copiar ese archivo no constituye un método de migración de secretos.
 
-Las extensiones descargadas durante la ejecución se guardan en **%LOCALAPPDATA%\MinioDesk\extensions**. Si se incluye **extensions/httpfs.duckdb_extension** junto al ejecutable, se utiliza esa copia.
+Las extensiones descargadas durante la ejecución se guardan en **%LOCALAPPDATA%\Elcano\extensions**. Si se incluye **extensions/httpfs.duckdb_extension** junto al ejecutable, se utiliza esa copia.
 
-La preferencia de tema claro u oscuro se guarda en **%LOCALAPPDATA%\MinioDesk\appearance.json**.
+La preferencia de tema claro u oscuro se guarda en **%LOCALAPPDATA%\Elcano\appearance.json**.
 
-La preferencia de precarga se guarda en **%LOCALAPPDATA%\MinioDesk\preferences.json**. Los diagnósticos se guardan en **%LOCALAPPDATA%\MinioDesk\logs** y rotan al superar aproximadamente 1 MiB, conservando un archivo anterior. Registran referencia, fecha, tipo de excepción, código S3 y nombres de métodos; omiten mensajes de excepción, valores de parámetros, SQL, URLs y credenciales. **Copiar diagnóstico** permite compartir esos detalles para investigar un error.
+La preferencia de precarga se guarda en **%LOCALAPPDATA%\Elcano\preferences.json**. Los diagnósticos se guardan en **%LOCALAPPDATA%\Elcano\logs** y rotan al superar aproximadamente 1 MiB, conservando un archivo anterior. Registran referencia, fecha, tipo de excepción, código S3 y nombres de métodos; omiten mensajes de excepción, valores de parámetros, SQL, URLs y credenciales. **Copiar diagnóstico** permite compartir esos detalles para investigar un error.
 
 ## Integración continua
 
-El flujo de GitHub Actions en `.github/workflows/windows.yml` compila en Windows, comprueba las dependencias bloqueadas, ejecuta las pruebas locales, del protocolo S3 y de WPF, y genera el ZIP portable con su SHA-256. El ZIP y las capturas se pueden descargar como artefactos de la ejecución. Las pruebas de interfaz están en `tests/MinioDesk.UiTests/` y no necesitan credenciales ni Docker. El flujo no publica releases automáticamente.
+El flujo de GitHub Actions en `.github/workflows/windows.yml` compila en Windows, comprueba las dependencias bloqueadas, ejecuta las pruebas locales, del protocolo S3 y de WPF, y genera el ZIP portable con su SHA-256. El ZIP y las capturas se pueden descargar como artefactos de la ejecución. Las pruebas de interfaz están en `tests/Elcano.UiTests/` y no necesitan credenciales ni Docker. El flujo no publica releases automáticamente.
 
 ## Solución de problemas
 

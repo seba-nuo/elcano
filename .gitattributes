@@ -1,0 +1,2 @@
+# Preserve upstream legal documents byte-for-byte; manifest hashes include line endings.
+licenses/** -text whitespace=-blank-at-eol,-blank-at-eof

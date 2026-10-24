@@ -27,9 +27,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Restore locked dependencies
-        run: dotnet restore MinioDesk.slnx --locked-mode -r win-x64
+        run: dotnet restore Elcano.slnx --locked-mode -r win-x64
       - name: Build
-        run: dotnet build MinioDesk.slnx -c Release --no-restore -m:1 -nr:false
+        run: dotnet build Elcano.slnx -c Release --no-restore -m:1 -nr:false
       - name: Local regression tests
         run: ./scripts/test.ps1 -NoBuild
       - name: S3 folder protocol tests
@@ -41,10 +41,10 @@ jobs:
       - name: Upload portable ZIP and checksum
         uses: actions/upload-artifact@v7
         with:
-          name: MinioDesk-win-x64
+          name: Elcano-win-x64
           path: |
-            artifacts/MinioDesk-win-x64.zip
-            artifacts/MinioDesk-win-x64.zip.sha256
+            artifacts/Elcano-win-x64.zip
+            artifacts/Elcano-win-x64.zip.sha256
           compression-level: 0
           if-no-files-found: error
       - name: Upload UI screenshots

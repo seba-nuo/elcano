@@ -1,0 +1,383 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-10-24",
+  "packages": [
+    {
+      "id": "AWSSDK.S3",
+      "version": "4.0.104.4",
+      "license": "Apache-2.0",
+      "files": [
+        "AWSSDK/License.txt",
+        "AWSSDK/Notice.txt"
+      ]
+    },
+    {
+      "id": "AWSSDK.Core",
+      "version": "4.0.102.11",
+      "license": "Apache-2.0",
+      "files": [
+        "AWSSDK/License.txt",
+        "AWSSDK/Notice.txt"
+      ]
+    },
+    {
+      "id": "Apache.Arrow",
+      "version": "23.0.0",
+      "license": "Apache-2.0",
+      "files": [
+        "Arrow/LICENSE.txt",
+        "Arrow/NOTICE.txt"
+      ]
+    },
+    {
+      "id": "Apache.Arrow.Scalars",
+      "version": "23.0.0",
+      "license": "Apache-2.0",
+      "files": [
+        "Arrow/LICENSE.txt",
+        "Arrow/NOTICE.txt"
+      ]
+    },
+    {
+      "id": "DuckDB.NET.Bindings.Full",
+      "version": "1.5.6.1",
+      "license": "MIT",
+      "files": [
+        "DuckDB.NET/LICENSE.md",
+        "DuckDB.NET/LICENSE-DuckDB.txt",
+        "DuckDB/LICENSE"
+      ]
+    },
+    {
+      "id": "DuckDB.NET.Data.Full",
+      "version": "1.5.6.1",
+      "license": "MIT",
+      "files": [
+        "DuckDB.NET/LICENSE.md",
+        "DuckDB.NET/LICENSE-DuckDB.txt",
+        "DuckDB/LICENSE"
+      ]
+    },
+    {
+      "id": "AvalonEdit",
+      "version": "6.3.1.120",
+      "license": "MIT",
+      "files": [
+        "AvalonEdit/LICENSE.txt"
+      ]
+    },
+    {
+      "id": "System.Security.Cryptography.ProtectedData",
+      "version": "10.0.0",
+      "license": "MIT",
+      "files": [
+        "dotnet-runtime/LICENSE.TXT",
+        "dotnet-runtime/THIRD-PARTY-NOTICES.TXT"
+      ]
+    }
+  ],
+  "runtimes": [
+    {
+      "id": "Microsoft.NETCore.App.Runtime.win-x64",
+      "version": "10.0.13",
+      "license": "MIT",
+      "files": [
+        "dotnet-runtime/LICENSE.TXT",
+        "dotnet-runtime/THIRD-PARTY-NOTICES.TXT"
+      ]
+    },
+    {
+      "id": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+      "version": "10.0.13",
+      "license": "MIT",
+      "files": [
+        "dotnet-desktop/LICENSE",
+        "dotnet-desktop/WPF/LICENSE.TXT",
+        "dotnet-desktop/WPF/THIRD-PARTY-NOTICES.TXT",
+        "dotnet-desktop/WinForms/LICENSE.TXT",
+        "dotnet-desktop/WinForms/THIRD-PARTY-NOTICES.TXT"
+      ]
+    }
+  ],
+  "native": [
+    {
+      "path": "duckdb.dll",
+      "version": "v1.5.6",
+      "sha256": "7e90bdef028d57b45490d6f53530e3c012a5d9abdc4c6723449200663dc84ed0",
+      "source": "https://github.com/duckdb/duckdb/tree/v1.5.6"
+    },
+    {
+      "path": "extensions/httpfs.duckdb_extension",
+      "version": "4bc690dba4496c765777a0269d48fdbaff7cdc11",
+      "sha256": "9b0b0202cfa34f94f12bd9b2698002735bbcd0c1bd5fda2e85450583efd18e94",
+      "source": "https://github.com/duckdb/duckdb-httpfs/tree/4bc690dba4496c765777a0269d48fdbaff7cdc11"
+    }
+  ],
+  "files": [
+    {
+      "path": "AWSSDK/License.txt",
+      "sha256": "192898453336a3f666e8138988cdda21ee7b858b1184e00c882c531df174d0d1",
+      "source": "https://raw.githubusercontent.com/aws/aws-sdk-net/main/License.txt"
+    },
+    {
+      "path": "AWSSDK/Notice.txt",
+      "sha256": "ebc5492b4c77f9c52a8d33d27588e69717a33440bcb9e2cc5a2652309a4ed20f",
+      "source": "https://raw.githubusercontent.com/aws/aws-sdk-net/main/Notice.txt"
+    },
+    {
+      "path": "Arrow/LICENSE.txt",
+      "sha256": "f49cc7be44c8d4b6efffed6ac00026f2ff2146310f040350b50be30ed3f9c570",
+      "source": "https://www.nuget.org/packages/Apache.Arrow/23.0.0"
+    },
+    {
+      "path": "Arrow/NOTICE.txt",
+      "sha256": "8a85856f9defa8786aa8b8c923f95d772c544241fcfccfe73717e8e9bc25ddee",
+      "source": "https://github.com/apache/arrow-dotnet/blob/main/NOTICE.txt"
+    },
+    {
+      "path": "AvalonEdit/LICENSE.txt",
+      "sha256": "7cfe74f11eaef7a239e7c63d33595f924e7922fb3e3f3651014389620b228a07",
+      "source": "https://github.com/icsharpcode/AvalonEdit/blob/862415d51eddc9eac93f462dbc522ffbf929cd52/LICENSE"
+    },
+    {
+      "path": "DuckDB.NET/LICENSE-DuckDB.txt",
+      "sha256": "3ad73e53243c374756dfc2eb5e780abd462ce99e89c84f9e46ada745db934107",
+      "source": "https://www.nuget.org/packages/DuckDB.NET.Bindings.Full/1.5.6.1"
+    },
+    {
+      "path": "DuckDB.NET/LICENSE.md",
+      "sha256": "91ba5e7529bb908f1e09539fde3e37ed379bffc42d84473683d29499e6c8dc75",
+      "source": "https://www.nuget.org/packages/DuckDB.NET.Bindings.Full/1.5.6.1"
+    },
+    {
+      "path": "DuckDB/LICENSE",
+      "sha256": "7e17fd31249fa875cb3b1c5e05c6c3e99b75509f6a2804ca176c217834de1dcb",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/LICENSE"
+    },
+    {
+      "path": "DuckDB/extension/icu/third_party/icu/LICENSE",
+      "sha256": "f0e4446e54a2cee165d69e007f4787183d497c709664e79d6955691bfeb3f837",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/extension/icu/third_party/icu/LICENSE"
+    },
+    {
+      "path": "DuckDB/src/include/duckdb/storage/compression/alp/algorithm/LICENSE",
+      "sha256": "905b4e0855ce0a277d19bb7c00d61e3d46598eb62446a95fd8c8c6cccad53d86",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/src/include/duckdb/storage/compression/alp/algorithm/LICENSE"
+    },
+    {
+      "path": "DuckDB/src/include/duckdb/storage/compression/alprd/algorithm/LICENSE",
+      "sha256": "905b4e0855ce0a277d19bb7c00d61e3d46598eb62446a95fd8c8c6cccad53d86",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/src/include/duckdb/storage/compression/alprd/algorithm/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/brotli/LICENSE",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/brotli/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/concurrentqueue/LICENSE",
+      "sha256": "eaf0df40f77e929cd83cd4485de2bdf806c7908db84a52007a700588f6566331",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/concurrentqueue/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/fast_float/LICENSE",
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/fast_float/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/fastpforlib/LICENSE",
+      "sha256": "9ff562631a04b8cb1030c53fdf461bd749c9af0655d86e4f17eb270e935a7fe2",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/fastpforlib/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/fmt/LICENSE",
+      "sha256": "825c9324e70f8c839c8ba910543dd4a7daee243b86ef960594c11381a19980b8",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/fmt/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/fsst/LICENSE",
+      "sha256": "20e9c14ff437a73a6e2b105f1b5aaf9ef24a84d962741c0ab01d04b4910294ab",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/fsst/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/httplib/LICENSE",
+      "sha256": "4b45cbe16d7b71b89ae6127e26e0d90a029198ca5e958ad8e3d0b8bbed364d8b",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/httplib/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/hyperloglog/LICENSE",
+      "sha256": "3a3fcdbaecbeb1e7dea97843961100c637766e59de4674fed809760283b716e1",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/hyperloglog/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/jaro_winkler/LICENSE",
+      "sha256": "077815ffd10f0677d060e9d5c0059592d28c41d1e9985c848435e0ea17ea06c3",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/jaro_winkler/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/jemalloc/LICENSE",
+      "sha256": "94aa2caa98c25d942f58b956c71dba6a99ff98fc3a31cbc669fe2a4cd0268b53",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/jemalloc/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/libpg_query/LICENSE",
+      "sha256": "2780b6375a5ab1901472b7694958dd0c8c1381a21f0765cbb64e1923d94c6717",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/libpg_query/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/lz4/LICENSE",
+      "sha256": "99b8d2d8011d1ce548c5aaf3270c6bee014507fa821c4f9a7e300a9e11015db7",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/lz4/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/mbedtls/LICENSE",
+      "sha256": "9b405ef4c89342f5eae1dd828882f931747f71001cfba7d114801039b52ad09b",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/mbedtls/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/miniz/LICENSE",
+      "sha256": "0115478d567121238cf6cc1c0c361926cf07a49d9e4c9e66da97fac6a01646b3",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/miniz/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/parquet/LICENSE",
+      "sha256": "70b6a7d630fae9f49643f9b16bee42a2feda68301f9c14470e7fb5ad0599bb9f",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/parquet/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/pcg/LICENSE",
+      "sha256": "3febf788fd814bf1f350db169bdc51b28ff7e7596ff1f09cc0181e4fde42b480",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/pcg/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/pdqsort/LICENSE",
+      "sha256": "323fc18e35fcf058d69d684022ef844f206cb8fefb2bac1298fa1767e0b9ae38",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/pdqsort/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/re2/LICENSE",
+      "sha256": "6040cda75d90b1738292a631d89934c411ef7ffd543c4d6a1b7edfc8edf29449",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/re2/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/ska_sort/BOOST_LICENSE_1_0.txt",
+      "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+      "source": "https://www.boost.org/LICENSE_1_0.txt"
+    },
+    {
+      "path": "DuckDB/third_party/ska_sort/LICENSE",
+      "sha256": "3c3a838f6ac2201bb8255b374fad34e3e1de07940c3acdc09e661e118fb75078",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/ska_sort/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/skiplist/LICENSE",
+      "sha256": "3b9cac57dbb2d7ec76298cb0d33afe12f891e1d0dbb38ff17993a14f3480ee7c",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/skiplist/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/snappy/LICENSE",
+      "sha256": "55172044f7e241207117448a4d9d6ba1d0925c8ad66b5d4c08c70adfa9cc3de6",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/snappy/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/snowball/LICENSE",
+      "sha256": "f6f9e4c0e737728ca980de8595ded046d5e077017c1bb0ee05dc794a01434dae",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/snowball/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/tdigest/LICENSE",
+      "sha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/tdigest/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/tdigest/NOTICES",
+      "sha256": "5ded9726da6c5360c0b0ba0725455f57b367dc9b4954bed7ca8f235d26cee33b",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/tdigest/NOTICES"
+    },
+    {
+      "path": "DuckDB/third_party/thrift/thrift/LICENSE",
+      "sha256": "23df881cec3192d1f4474633c14eb2ec30a45b84f8daeb82b9de5d2bd3ac8218",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/thrift/thrift/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/utf8proc/LICENSE",
+      "sha256": "fbc720fcc90fb44396985646f67e4d19be03e0c0539f7138ed9dc6efba49dc49",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/utf8proc/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/vergesort/LICENSE",
+      "sha256": "12dd392860ea2a3633bce5f33d7eebd4308a7e3386b4372260e5e72be7a64033",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/vergesort/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/yyjson/LICENSE",
+      "sha256": "734d7fb3eb56f0a04e6b7ab0c5d3634624a8bfaa2acc87a2c03a029b20868cf8",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/yyjson/LICENSE"
+    },
+    {
+      "path": "DuckDB/third_party/zstd/LICENSE",
+      "sha256": "8b7bc50ec3ecee27224e17d4d316a939fa2ddda9c88e0ddc2f059ce432edbfb9",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb/v1.5.6/third_party/zstd/LICENSE"
+    },
+    {
+      "path": "OpenSSL/LICENSE.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "source": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.6.0/LICENSE.txt"
+    },
+    {
+      "path": "curl/COPYING",
+      "sha256": "e18f1989333b70044b2adfb7dc2f905d0119dbdcac3bc9f4bc9d540e3a29de5b",
+      "source": "https://raw.githubusercontent.com/curl/curl/curl-8_17_0/COPYING"
+    },
+    {
+      "path": "curl/THIRD-PARTY-NOTICES.txt",
+      "sha256": "79f07f70f89e69611061d2ffc62cd32060319792326e587e9f9da299a27742f2",
+      "source": "https://github.com/curl/curl/tree/curl-8_17_0/lib"
+    },
+    {
+      "path": "dotnet-desktop/LICENSE",
+      "sha256": "a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab",
+      "source": "https://www.nuget.org/packages/Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.13"
+    },
+    {
+      "path": "dotnet-desktop/WPF/LICENSE.TXT",
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+      "source": "https://github.com/dotnet/wpf/blob/v10.0.13/LICENSE.TXT"
+    },
+    {
+      "path": "dotnet-desktop/WPF/THIRD-PARTY-NOTICES.TXT",
+      "sha256": "d23dba2fee20c6b59d8f7088ee9ed372459c952a319b7ca90f3eec370cc76eb9",
+      "source": "https://github.com/dotnet/wpf/blob/v10.0.13/THIRD-PARTY-NOTICES.TXT"
+    },
+    {
+      "path": "dotnet-desktop/WinForms/LICENSE.TXT",
+      "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+      "source": "https://github.com/dotnet/winforms/blob/v10.0.13/LICENSE.TXT"
+    },
+    {
+      "path": "dotnet-desktop/WinForms/THIRD-PARTY-NOTICES.TXT",
+      "sha256": "5a412b38efae0b162dc0893b319023f4cd14a8985a0f9f9ae01ac052b37a36eb",
+      "source": "https://github.com/dotnet/winforms/blob/v10.0.13/THIRD-PARTY-NOTICES.TXT"
+    },
+    {
+      "path": "dotnet-runtime/LICENSE.TXT",
+      "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b",
+      "source": "https://www.nuget.org/packages/Microsoft.NETCore.App.Runtime.win-x64/10.0.13"
+    },
+    {
+      "path": "dotnet-runtime/THIRD-PARTY-NOTICES.TXT",
+      "sha256": "6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21",
+      "source": "https://www.nuget.org/packages/Microsoft.NETCore.App.Runtime.win-x64/10.0.13"
+    },
+    {
+      "path": "httpfs/LICENSE",
+      "sha256": "7e17fd31249fa875cb3b1c5e05c6c3e99b75509f6a2804ca176c217834de1dcb",
+      "source": "https://raw.githubusercontent.com/duckdb/duckdb-httpfs/4bc690dba4496c765777a0269d48fdbaff7cdc11/LICENSE"
+    },
+    {
+      "path": "zlib/LICENSE",
+      "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243",
+      "source": "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE"
+    }
+  ]
+}

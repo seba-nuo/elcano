@@ -6,14 +6,14 @@ try {
     $testDirectory = Join-Path $projectRoot ('.local\test-runs\' + [Guid]::NewGuid().ToString('N'))
     $testMode = '--local'
     if ($Integration) {
-        if (-not $env:MINIODESK_TEST_ACCESS_KEY -or -not $env:MINIODESK_TEST_SECRET_KEY) {
-            throw 'Define MINIODESK_TEST_ACCESS_KEY y MINIODESK_TEST_SECRET_KEY para tus dos servidores locales.'
+        if (-not $env:ELCANO_TEST_ACCESS_KEY -or -not $env:ELCANO_TEST_SECRET_KEY) {
+            throw 'Define ELCANO_TEST_ACCESS_KEY y ELCANO_TEST_SECRET_KEY para tus dos servidores locales.'
         }
         $testMode = '--integration'
     }
     if ($FolderProtocol) { $testMode = '--folder-protocol' }
-    $testProject = 'MinioDesk.Smoke'
-    if ($Ui) { $testProject = 'MinioDesk.UiTests'; $testDirectory = Join-Path $projectRoot 'TestResults\UI' }
+    $testProject = 'Elcano.Smoke'
+    if ($Ui) { $testProject = 'Elcano.UiTests'; $testDirectory = Join-Path $projectRoot 'TestResults\UI' }
     if (-not $NoBuild) { Invoke-Dotnet build "tests/$testProject" -c Release --nologo }
     $assemblyPath = Join-Path $projectRoot "tests/$testProject/bin/Release/net10.0-windows/win-x64/$testProject.dll"
     if ($Ui) { Invoke-Dotnet $assemblyPath $testDirectory }
