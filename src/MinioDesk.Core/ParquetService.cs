@@ -5,7 +5,8 @@ using DuckDB.NET.Native;
 
 namespace MinioDesk.Core;
 
-public sealed record ParquetPreview(DataTable Rows, DataTable Schema, string Source, string? Text = null, bool IsTruncated = false);
+public sealed record ParquetPreview(DataTable Rows, DataTable Schema, string Source, string? Text = null, bool IsTruncated = false,
+    DataTable? ResultSchema = null, bool RowsTruncated = false, bool CellsTruncated = false);
 
 public sealed class ParquetService
 {
@@ -16,7 +17,7 @@ public sealed class ParquetService
     public async Task<ParquetPreview> PreviewRemoteAsync(ConnectionProfile profile, string bucket, string key, CancellationToken token)
         => await QueryRemoteAsync(profile, bucket, key, ParquetQuery.Default, token);
 
-    public async Task<ParquetPreview> QueryRemoteAsync(ConnectionProfile profile, string bucket, string key, string query, CancellationToken token)
+    public async Task<ParquetPreview> QueryRemoteAsync(ConnectionProfile profile, string bucket, string key, string query, CancellationToken token, IReadOnlyList<string>? columns = null)
     {
         profile.Validate();
         if (key.IndexOfAny(['*', '?', '[', ']']) >= 0)
@@ -24,18 +25,18 @@ public sealed class ParquetService
         // One query at a time; each isolated database has exactly one endpoint/secret.
         query = ParquetQuery.Normalize(query);
         await gate.WaitAsync(token);
-        try { return await Task.Run(() => ReadPreview(profile, bucket, key, query, token), token); }
+        try { return await Task.Run(() => ReadPreview(profile, bucket, key, query, token, columns), token); }
         finally { gate.Release(); }
     }
 
     public async Task<ParquetPreview> PreviewLocalAsync(string path, CancellationToken token)
         => await QueryLocalAsync(path, ParquetQuery.Default, token);
 
-    public async Task<ParquetPreview> QueryLocalAsync(string path, string query, CancellationToken token)
+    public async Task<ParquetPreview> QueryLocalAsync(string path, string query, CancellationToken token, IReadOnlyList<string>? columns = null)
     {
         query = ParquetQuery.Normalize(query);
         await gate.WaitAsync(token);
-        try { return await Task.Run(() => ReadPreview(null, "", Path.GetFullPath(path), query, token), token); }
+        try { return await Task.Run(() => ReadPreview(null, "", Path.GetFullPath(path), query, token, columns), token); }
         finally { gate.Release(); }
     }
 
@@ -100,7 +101,7 @@ public sealed class ParquetService
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private ParquetPreview ReadPreview(ConnectionProfile? profile, string bucket, string key, string query, CancellationToken token)
+    private ParquetPreview ReadPreview(ConnectionProfile? profile, string bucket, string key, string query, CancellationToken token, IReadOnlyList<string>? columns)
     {
         using var connection = Open();
         using var command = connection.CreateCommand();
@@ -147,21 +148,36 @@ public sealed class ParquetService
             {
                 using (var statements = ExtractSingle(connection, query)) { }
                 var resultSchema = Describe(command, $"SELECT * FROM (\n{query}\n) AS result", token);
-                var names = resultSchema.Rows.Cast<DataRow>().Take(64).Select(row => (string)row[0]).ToArray();
-                var projection = string.Join(", ", names.Select(name => $"left(CAST({Identifier(name)} AS VARCHAR), 512) AS {Identifier(name)}"));
-                command.CommandText = $"SELECT {projection} FROM (\n{query}\n) AS result LIMIT 200;";
+                var available = resultSchema.Rows.Cast<DataRow>().ToDictionary(row => (string)row[0], row => (string)row[1], StringComparer.Ordinal);
+                var names = columns?.ToArray() ?? available.Keys.Take(64).ToArray();
+                if (names.Length is < 1 or > 64 || names.Distinct(StringComparer.Ordinal).Count() != names.Length || names.Any(name => !available.ContainsKey(name)))
+                    throw new ParquetQueryException("Elige entre 1 y 64 columnas del resultado actual.");
+                var projection = string.Join(", ", names.Select(name => $"left(CAST({Identifier(name)} AS VARCHAR), 513) AS {Identifier(name)}"));
+                command.CommandText = $"SELECT {projection} FROM (\n{query}\n) AS result LIMIT 201;";
                 command.UseStreamingMode = true;
                 var rows = new DataTable();
-                for (var index = 0; index < names.Length; index++) rows.Columns.Add($"c{index}", typeof(string)).Caption = names[index];
+                for (var index = 0; index < names.Length; index++)
+                {
+                    var column = rows.Columns.Add($"c{index}", typeof(string)); column.Caption = names[index];
+                    column.ExtendedProperties["DuckDB.Type"] = available[names[index]];
+                }
+                var rowsTruncated = false; var cellsTruncated = false;
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     token.ThrowIfCancellationRequested();
+                    if (rows.Rows.Count == 200) { rowsTruncated = true; break; }
                     var values = new object[reader.FieldCount];
                     reader.GetValues(values);
+                    for (var i = 0; i < values.Length; i++)
+                        if (values[i] is string text && text.Length > 512)
+                        {
+                            var length = char.IsHighSurrogate(text[511]) ? 511 : 512;
+                            values[i] = text[..length]; cellsTruncated = true;
+                        }
                     rows.Rows.Add(values);
                 }
-                return new ParquetPreview(rows, schema, source);
+                return new ParquetPreview(rows, schema, source, ResultSchema: resultSchema, RowsTruncated: rowsTruncated, CellsTruncated: cellsTruncated);
             }
             catch (DuckDBException exception) when (!token.IsCancellationRequested)
             {

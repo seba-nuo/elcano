@@ -115,6 +115,8 @@ Check(!cache.TryGet("b", out _) && cache.TryGet("a", out _) && cache.Bytes <= 10
 cache.Put("c", "12345678901");
 Check(!cache.TryGet("c", out _), "Caché: no retiene una vista que supera el presupuesto");
 cache.Clear(); Check(cache.Count == 0 && cache.Bytes == 0, "Caché: invalidación completa");
+ExplorerCacheChecks.Run();
+await PresentationChecks.RunAsync(directory);
 var crumbs = FolderBreadcrumbs.Build("datos", "ventas/2026/México/octubre/día 20/");
 Check(crumbs.Count == 6 && crumbs[^1].Prefix == "ventas/2026/México/octubre/día 20/" && crumbs[0].Prefix == "", "Rutas: segmentos Unicode, espacios y acceso a la raíz");
 var compact = FolderBreadcrumbs.Compact(crumbs);

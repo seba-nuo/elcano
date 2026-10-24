@@ -11,10 +11,13 @@ namespace MinioDesk.App;
 
 public partial class MainWindow : Window
 {
-    public MainViewModel ViewModel { get; } = new();
+    public MainViewModel ViewModel { get; }
+    private bool restoringExplorer;
     private readonly DispatcherTimer queryTimer = new() { Interval = TimeSpan.FromMilliseconds(850) };
-    public MainWindow()
+    public MainWindow() : this(new MainViewModel()) { }
+    public MainWindow(MainViewModel viewModel)
     {
+        ViewModel = viewModel;
         InitializeComponent(); DataContext = ViewModel; ThemeManager.Attach(this);
         queryTimer.Tick += (_, _) =>
         {
@@ -24,6 +27,14 @@ public partial class MainWindow : Window
         };
         ViewModel.PropertyChanged += (_, args) =>
         {
+            if (args.PropertyName is nameof(MainViewModel.Entries) or nameof(MainViewModel.ExplorerScrollOffset))
+            {
+                restoringExplorer = true;
+                Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+                {
+                    FindScroll(ObjectGrid)?.ScrollToVerticalOffset(ViewModel.ExplorerScrollOffset); restoringExplorer = false;
+                });
+            }
             if (args.PropertyName is nameof(MainViewModel.IsIdle) or nameof(MainViewModel.AutoRunQuery) && ViewModel.IsIdle && ViewModel.IsPreviewOpen &&
                 ViewModel.AutoRunQuery && ViewModel.QueryText != ViewModel.LastAttemptedQuery) queryTimer.Start();
         };
@@ -88,21 +99,13 @@ public partial class MainWindow : Window
         if (IsInitialized && CompletionPopup is not null && QueryEditor.IsKeyboardFocusWithin) UpdateCompletion(false);
     }
 
-    private (int Start, int End, string Prefix) CompletionSpan()
-    {
-        var text = QueryEditor.Text; var end = QueryEditor.CaretIndex; var start = end;
-        while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_')) start--;
-        var prefix = text[start..end];
-        while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
-        if (start > 0 && text[start - 1] == '"') start--;
-        if (end < text.Length && text[end] == '"') end++;
-        return (start, end, prefix);
-    }
+    private SqlCompletionSpan CompletionSpan() => SqlCompletionSpan.At(QueryEditor.Text, QueryEditor.CaretIndex);
 
     private void UpdateCompletion(bool force)
     {
         if (!QueryEditor.IsKeyboardFocusWithin || !ViewModel.IsTabularPreview) { CompletionPopup.IsOpen = false; return; }
         var span = CompletionSpan();
+        if (!span.CanComplete) { CompletionPopup.IsOpen = false; return; }
         if (!force && span.Prefix.Length == 0) { CompletionPopup.IsOpen = false; return; }
         var suggestions = ViewModel.QuerySuggestions(span.Prefix);
         CompletionList.ItemsSource = suggestions;
@@ -139,6 +142,7 @@ public partial class MainWindow : Window
     {
         if (CompletionList.SelectedItem is not SqlSuggestion suggestion) return;
         var span = CompletionSpan();
+        if (!span.CanComplete) { CompletionPopup.IsOpen = false; return; }
         CompletionPopup.IsOpen = false;
         QueryEditor.Select(span.Start, span.End - span.Start);
         QueryEditor.SelectedText = suggestion.InsertText;
@@ -158,11 +162,29 @@ public partial class MainWindow : Window
         e.Column = new SelectableTextColumn
         {
             Header = ViewModel.PreviewRows?.Table?.Columns[e.PropertyName]?.Caption ?? e.PropertyName,
-            Binding = new Binding(e.PropertyName) { Mode = BindingMode.OneWay }, Width = new DataGridLength(150), IsReadOnly = true
+            Binding = new Binding(e.PropertyName) { Mode = BindingMode.OneWay }, SortMemberPath = e.PropertyName, Width = new DataGridLength(150), IsReadOnly = true
         };
     }
     private void SchemaColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
         => e.Column = new SelectableTextColumn { Header = e.PropertyName, Binding = new Binding(e.PropertyName) { Mode = BindingMode.OneWay }, Width = new DataGridLength(180), IsReadOnly = true };
+    private void SortPreview(object sender, DataGridSortingEventArgs e)
+    {
+        var descending = e.Column.SortDirection == ListSortDirection.Ascending;
+        e.Handled = true; ViewModel.SortPreview(e.Column.SortMemberPath, descending);
+        foreach (var column in PreviewGrid.Columns) column.SortDirection = null;
+        e.Column.SortDirection = descending ? ListSortDirection.Descending : ListSortDirection.Ascending;
+    }
+    private void ExplorerScrolled(object sender, ScrollChangedEventArgs e)
+    {
+        if (!restoringExplorer && e.OriginalSource is ScrollViewer viewer) ViewModel.RememberExplorerScroll(viewer.VerticalOffset);
+    }
+    private static ScrollViewer? FindScroll(DependencyObject parent)
+    {
+        if (parent is ScrollViewer found) return found;
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindScroll(System.Windows.Media.VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+        return null;
+    }
     protected override void OnClosing(CancelEventArgs e)
     {
         if (ViewModel.IsBusy) { ViewModel.Cancel(); e.Cancel = true; }

@@ -46,7 +46,11 @@
           <TextBlock Text="EXPLORADOR DE ARCHIVOS" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="0,8,0,0"/>
         </StackPanel>
         <StackPanel Grid.Row="1" Margin="0,0,0,12">
-          <TextBlock Text="BUCKET" FontSize="10" Foreground="{DynamicResource Muted}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+          <Grid Margin="0,0,0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="BUCKET" FontSize="10" Foreground="{DynamicResource Muted}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="1" Text="{Binding ExplorerCacheLabel}" ToolTip="{Binding ExplorerCacheDetails}" Foreground="{DynamicResource Muted}" FontSize="9" VerticalAlignment="Center" Margin="4,0,8,0"/>
+            <CheckBox Grid.Column="2" Content="Precarga" IsChecked="{Binding PrefetchEnabled}" FontSize="10" ToolTip="Precargar listados lentamente en segundo plano. Desactívalo para reducir peticiones de red."/>
+          </Grid>
           <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Grid Margin="0,0,8,0">
@@ -87,11 +91,15 @@
                  Background="Transparent" Foreground="{DynamicResource Muted}" FontSize="10" Margin="0,6,0,0"
                  ToolTip="{Binding FolderPath}" TextChanged="FolderPathChanged" HorizontalScrollBarVisibility="Hidden"/>
         </StackPanel>
-        <TextBox Grid.Row="3" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Tag="Filtrar esta página…" Style="{StaticResource PlaceholderTextBox}" Margin="0,0,0,12"/>
+        <Grid Grid.Row="3" Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <TextBox Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" Tag="Filtrar esta página…" Style="{StaticResource PlaceholderTextBox}"/>
+          <Button Grid.Column="1" Content="×" Command="{Binding ClearFilterCommand}" Style="{StaticResource IconButton}" Margin="4,0,0,0" Visibility="{Binding HasFilter, Converter={StaticResource BoolVisibility}}" ToolTip="Limpiar filtro" AutomationProperties.Name="Limpiar filtro"/>
+        </Grid>
 
         <Grid Grid.Row="5">
           <ListBox x:Name="ObjectGrid" ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
                    MouseDoubleClick="OpenObject" KeyDown="OpenObjectKey" PreviewMouseRightButtonDown="SelectContextFile" ContextMenuOpening="OpenFileMenu"
+                   ScrollViewer.ScrollChanged="ExplorerScrolled"
                    IsEnabled="{Binding IsIdle}" BorderThickness="0" Background="Transparent"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
@@ -143,7 +151,7 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-          <TextBlock Text="Aquí aparecerán tus archivos." Foreground="{DynamicResource Muted}" FontSize="12" TextAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+          <TextBlock Text="{Binding ExplorerEmptyMessage}" Foreground="{DynamicResource Muted}" FontSize="12" TextAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
             <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Entries.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
           </TextBlock>
           <Border Background="{DynamicResource Surface}" Visibility="{Binding IsExplorerLoading, Converter={StaticResource BoolVisibility}}">
@@ -214,7 +222,9 @@
     <Grid Grid.Column="2" Grid.Row="1">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <Border Background="{DynamicResource ErrorBackground}" BorderBrush="{DynamicResource ErrorBorder}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12" Visibility="{Binding HasError, Converter={StaticResource BoolVisibility}}">
-        <TextBlock Text="{Binding Error}" Foreground="{DynamicResource ErrorText}" TextWrapping="Wrap"/>
+        <DockPanel><Button DockPanel.Dock="Right" Content="Copiar diagnóstico" Command="{Binding CopyDiagnosticCommand}" Padding="8,4" Margin="12,0,0,0" ToolTip="Copia una referencia y datos técnicos sin credenciales ni consultas SQL."/>
+          <TextBlock Text="{Binding Error}" Foreground="{DynamicResource ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        </DockPanel>
       </Border>
       <Border Grid.Row="1" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
         <Grid>
@@ -236,9 +246,11 @@
                 <TextBox x:Name="PreviewPathText" Text="{Binding PreviewPath, Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Padding="0"
                          Background="Transparent" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,5,0,0"
                          ToolTip="{Binding PreviewPath}" HorizontalScrollBarVisibility="Hidden"/>
-                <TextBlock Text="{Binding PreviewSummary}" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" FontSize="12"/>
+                <TextBlock Text="{Binding PreviewSummary}" ToolTip="{Binding PreviewSummary}" Foreground="{DynamicResource Muted}" Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding PreviewLimitsLabel}" Foreground="{DynamicResource Muted}" Margin="0,3,0,0" FontSize="10" TextWrapping="Wrap" Visibility="{Binding IsTabularPreview, Converter={StaticResource BoolVisibility}}"/>
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Columnas" Command="{Binding ChooseColumnsCommand}" Padding="10,6" ToolTip="Elige hasta 64 columnas del resultado. Ejecuta primero cualquier cambio de la consulta." Visibility="{Binding IsTabularPreview, Converter={StaticResource BoolVisibility}}"/>
                 <Button Content="Abrir local" Command="{Binding LocalPreviewCommand}" Padding="10,6"/>
                 <Button Content="Cerrar" Command="{Binding ClosePreviewCommand}" Padding="10,6" Margin="0"/>
               </StackPanel>
@@ -278,7 +290,7 @@
               </Border>
             </Grid>
             <TabControl Grid.Row="2" BorderThickness="0" Background="{DynamicResource Surface}" Visibility="{Binding IsTabularPreview, Converter={StaticResource BoolVisibility}}">
-              <TabItem Header="Datos"><DataGrid x:Name="PreviewGrid" ItemsSource="{Binding PreviewRows}" AutoGeneratingColumn="PreviewColumn" ToolTip="Selecciona texto o celdas y pulsa Ctrl+C para copiar."/></TabItem>
+              <TabItem Header="Datos"><DataGrid x:Name="PreviewGrid" ItemsSource="{Binding PreviewItems}" AutoGeneratingColumn="PreviewColumn" Sorting="SortPreview" ToolTip="Ordena solo las filas de esta vista. Para ordenar todo el archivo usa ORDER BY. Selecciona texto o celdas y pulsa Ctrl+C para copiar."/></TabItem>
               <TabItem Header="Esquema"><DataGrid ItemsSource="{Binding PreviewSchema}" AutoGeneratingColumn="SchemaColumn"/></TabItem>
             </TabControl>
             <TextBox Grid.Row="2" Text="{Binding PreviewText, Mode=OneWay}" Visibility="{Binding IsTextPreview, Converter={StaticResource BoolVisibility}}"

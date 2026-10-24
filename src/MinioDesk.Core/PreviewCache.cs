@@ -28,7 +28,7 @@ public sealed class PreviewCache<T>(Func<T, long> sizeOf, long maxBytes = 16 * 1
 
 public static class PreviewMemory
 {
-    public static long Estimate(ParquetPreview preview) => 1024 + (preview.Text?.Length ?? 0) * 2L + Estimate(preview.Rows) + Estimate(preview.Schema);
+    public static long Estimate(ParquetPreview preview) => 1024 + (preview.Text?.Length ?? 0) * 2L + Estimate(preview.Rows) + Estimate(preview.Schema) + (preview.ResultSchema is null ? 0 : Estimate(preview.ResultSchema));
     private static long Estimate(DataTable table) => 1024 + table.Columns.Cast<DataColumn>().Sum(column => 256L + column.Caption.Length * 2L) +
         table.Rows.Cast<DataRow>().Sum(row => 128L + row.ItemArray.Sum(value => 64L + (value is string text ? text.Length * 2L : 8)));
 }

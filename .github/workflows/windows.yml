@@ -1,0 +1,56 @@
+name: Windows build, tests and portable ZIP
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore locked dependencies
+        run: dotnet restore MinioDesk.slnx --locked-mode -r win-x64
+      - name: Build
+        run: dotnet build MinioDesk.slnx -c Release --no-restore -m:1 -nr:false
+      - name: Local regression tests
+        run: ./scripts/test.ps1 -NoBuild
+      - name: S3 folder protocol tests
+        run: ./scripts/test.ps1 -FolderProtocol -NoBuild
+      - name: WPF interface regression tests
+        run: ./scripts/test.ps1 -Ui -NoBuild
+      - name: Build portable application and ZIP
+        run: ./scripts/publish.ps1 -NoRestore
+      - name: Upload portable ZIP and checksum
+        uses: actions/upload-artifact@v7
+        with:
+          name: MinioDesk-win-x64
+          path: |
+            artifacts/MinioDesk-win-x64.zip
+            artifacts/MinioDesk-win-x64.zip.sha256
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: WPF-screenshots
+          path: TestResults/UI/*.png
+          if-no-files-found: ignore

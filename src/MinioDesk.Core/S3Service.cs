@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 namespace MinioDesk.Core;
 
-public sealed class S3Service
+public sealed class S3Service : IS3Service
 {
     public static AmazonS3Client CreateClient(ConnectionProfile profile)
     {

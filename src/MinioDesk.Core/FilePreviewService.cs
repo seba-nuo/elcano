@@ -28,15 +28,15 @@ public sealed class FilePreviewService(string? extensionDirectory = null)
         return await ReadTextAsync(stream, path, token);
     }
 
-    public Task<ParquetPreview> QueryRemoteAsync(ConnectionProfile profile, string bucket, string key, string sql, CancellationToken token)
+    public Task<ParquetPreview> QueryRemoteAsync(ConnectionProfile profile, string bucket, string key, string sql, CancellationToken token, IReadOnlyList<string>? columns = null)
     {
         ValidateTabular(key);
-        return tables.QueryRemoteAsync(profile, bucket, key, sql, token);
+        return tables.QueryRemoteAsync(profile, bucket, key, sql, token, columns);
     }
-    public Task<ParquetPreview> QueryLocalAsync(string path, string sql, CancellationToken token)
+    public Task<ParquetPreview> QueryLocalAsync(string path, string sql, CancellationToken token, IReadOnlyList<string>? columns = null)
     {
         ValidateTabular(path);
-        return tables.QueryLocalAsync(path, sql, token);
+        return tables.QueryLocalAsync(path, sql, token, columns);
     }
     private static void ValidateExtension(string path)
     {

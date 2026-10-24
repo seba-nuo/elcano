@@ -6,7 +6,7 @@ Aplicación de escritorio para **Windows** que permite conectarse a **MinIO**, e
 
 - Crear, editar, probar y alternar perfiles de conexión.
 - Guardar las credenciales cifradas para el usuario actual de Windows.
-- Explorar buckets y carpetas virtuales, con navegación por páginas.
+- Explorar buckets y carpetas virtuales, con navegación por páginas, caché y precarga gradual de carpetas.
 - Filtrar y ordenar los archivos de la página actual.
 - Subir archivos con progreso, cancelación y carga multipart para archivos grandes.
 - Descargar archivos por streaming, descargar carpetas como ZIP y eliminar archivos o carpetas desde su menú contextual.
@@ -88,6 +88,10 @@ La eliminación de carpetas trabaja por lotes y puede cancelarse. Los objetos ya
 
 La vista previa muestra hasta **200 filas**, **64 columnas** y **512 caracteres por celda**. La pestaña **Esquema** muestra los nombres y tipos originales de las columnas, incluso si el archivo no contiene filas.
 
+El encabezado indica cuántas columnas del resultado se están mostrando y avisa si hay filas o celdas recortadas. **Columnas** permite buscar y elegir entre 1 y 64 columnas, incluidas las posteriores a las primeras 64. Para cambiar la selección después de editar SQL, ejecuta primero la consulta. **Restablecer** vuelve a la selección inicial.
+
+Los encabezados conservan literalmente los guiones, guiones bajos y otros caracteres de los nombres. Al pulsar un encabezado se ordenan **solo las filas de la vista previa**, respetando el tipo numérico o de fecha; para ordenar el archivo completo utiliza **ORDER BY**. Los valores nulos aparecen como **NULL** en cursiva y se distinguen de una cadena vacía.
+
 El encabezado del visor muestra la ruta completa del archivo abierto, que se puede seleccionar y copiar. En **Datos** y **Esquema** puedes seleccionar texto dentro de una celda o seleccionar varias celdas y usar **Ctrl+C**. El contenido continúa siendo de solo lectura. TXT también permite seleccionar y copiar su texto.
 
 Los CSV se leen como tablas UTF-8, con detección automática de separador, cabecera y tipos. Se admiten valores entre comillas y campos con saltos de línea. La detección de tipos utiliza una muestra de 2048 filas y cada línea CSV se limita a 1 MiB; archivos con tipos inconsistentes o formatos ambiguos pueden necesitar normalización antes de abrirlos.
@@ -99,6 +103,16 @@ Los TXT se muestran como texto de solo lectura, conservando saltos de línea y t
 Las vistas abiertas se reutilizan al volver al mismo archivo, conservando la consulta y el último resultado. La caché está en memoria, con un presupuesto estimado de **16 MiB** y un máximo de **12 vistas**; se descartan primero las menos recientes. No conserva copias completas de los archivos ni permanece al cerrar la aplicación.
 
 Se vacía al pulsar **Actualizar**, reconectar, cambiar de conexión o bucket, y al iniciar una subida o eliminación. Navegar por carpetas o páginas conserva la caché. Para recoger cambios realizados desde otro cliente, pulsa **Actualizar**. Los archivos locales también se identifican por su tamaño y fecha de modificación.
+
+### Caché del explorador y precarga
+
+Los listados de carpetas, las páginas visitadas y sus recuentos se reutilizan al volver a ellos. Esta caché independiente vive en memoria, con un presupuesto estimado de **8 MiB** y un máximo de **128 entradas**; se descartan primero las menos recientes.
+
+Después de cargar la raíz o una carpeta, el cliente precarga gradualmente la primera página de sus subcarpetas y continúa por las que va descubriendo. Hace una sola petición de precarga a la vez, esperando **dos segundos** antes de cada petición, hasta un máximo de **64 carpetas por renovación de la caché**. No descarga archivos ni recorre las páginas adicionales de cada carpeta. La precarga se pausa al navegar, abrir archivos o realizar otras operaciones, y se reanuda cuando el cliente queda libre. Los fallos de una precarga no interrumpen el trabajo.
+
+Ambas cachés se vacían al actualizar, reconectar, cambiar de conexión o bucket, o iniciar una subida o eliminación. Al cerrar la ventana se detiene la precarga. Para ver cambios hechos desde otro cliente, pulsa **Actualizar**.
+
+Junto al bucket se muestra la hora de actualización del listado y la indicación **Caché** cuando se reutiliza desde memoria. La casilla **Precarga** permite activar o desactivar las peticiones especulativas; la preferencia queda guardada. Al volver a una carpeta se recuperan su página, filtro, selección y posición de desplazamiento. Las carpetas nuevas empiezan sin filtro; **×** limpia el filtro actual y el mensaje **Sin coincidencias** distingue una búsqueda sin resultados de una carpeta vacía.
 
 ### Consultas SQL
 
@@ -168,6 +182,8 @@ artifacts/MinioDesk-win-x64/
 
 Copia **toda esa carpeta** al otro equipo o comprímela como ZIP. El usuario final abre **MinioDesk.exe** y configura sus propias conexiones; no necesita instalar .NET por separado.
 
+El script también genera **artifacts/MinioDesk-win-x64.zip** y su suma **SHA-256**. Para una versión concreta puedes usar `-PackageVersion 0.2.0` y para otra carpeta de salida `-OutputDirectory artifacts/MinioDesk-0.2.0-win-x64`. Si la publicación está abierta, utiliza otra carpeta o cierra esa instancia antes de actualizarla.
+
 La publicación actual está dirigida a Windows x64. No se generan paquetes para Windows de 32 bits ni una compilación nativa ARM64.
 
 ## Scripts y estructura del proyecto
@@ -192,6 +208,9 @@ Comandos principales:
 # Ejecutar las comprobaciones locales
 .\scripts\test.ps1
 
+# Ejecutar las regresiones de interfaz WPF y generar capturas de ambos temas
+.\scripts\test.ps1 -Ui
+
 # Probar operaciones de carpetas contra un servidor S3 simulado local
 .\scripts\test.ps1 -FolderProtocol
 ~~~
@@ -211,6 +230,12 @@ Los nombres, endpoints, región y bucket se guardan como metadatos. Las claves d
 Las extensiones descargadas durante la ejecución se guardan en **%LOCALAPPDATA%\MinioDesk\extensions**. Si se incluye **extensions/httpfs.duckdb_extension** junto al ejecutable, se utiliza esa copia.
 
 La preferencia de tema claro u oscuro se guarda en **%LOCALAPPDATA%\MinioDesk\appearance.json**.
+
+La preferencia de precarga se guarda en **%LOCALAPPDATA%\MinioDesk\preferences.json**. Los diagnósticos se guardan en **%LOCALAPPDATA%\MinioDesk\logs** y rotan al superar aproximadamente 1 MiB, conservando un archivo anterior. Registran referencia, fecha, tipo de excepción, código S3 y nombres de métodos; omiten mensajes de excepción, valores de parámetros, SQL, URLs y credenciales. **Copiar diagnóstico** permite compartir esos detalles para investigar un error.
+
+## Integración continua
+
+El flujo de GitHub Actions en `.github/workflows/windows.yml` compila en Windows, comprueba las dependencias bloqueadas, ejecuta las pruebas locales, del protocolo S3 y de WPF, y genera el ZIP portable con su SHA-256. El ZIP y las capturas se pueden descargar como artefactos de la ejecución. Las pruebas de interfaz están en `tests/MinioDesk.UiTests/` y no necesitan credenciales ni Docker. El flujo no publica releases automáticamente.
 
 ## Solución de problemas
 

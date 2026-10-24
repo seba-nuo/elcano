@@ -4,19 +4,35 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Data;
 using Amazon.S3;
 using Microsoft.Win32;
 using MinioDesk.Core;
 
 namespace MinioDesk.App;
 
-public sealed class MainViewModel : Observable
+public sealed partial class MainViewModel : Observable
 {
-    private readonly ProfileStore store = new();
-    private readonly S3Service s3 = new();
+    private readonly ProfileStore store;
+    private readonly IS3Service s3;
+    private readonly DiagnosticLog diagnostics;
+    private readonly ClientPreferencesStore preferences;
     private readonly FolderTransferService folders = new();
     private readonly FilePreviewService files = new();
+    private readonly ExplorerCache explorerCache = new();
     private readonly PreviewCache<CachedView> previewCache = new(view => PreviewMemory.Estimate(view.Result) + view.Sql.Length * 2L);
+    private readonly Queue<string> prefetchQueue = new();
+    private readonly HashSet<string> prefetchFolders = new(StringComparer.Ordinal);
+    private CancellationTokenSource? prefetchOperation;
+    private bool backgroundStopped;
+    private bool prefetchEnabled = true;
+    private string explorerCacheLabel = "";
+    private string explorerCacheDetails = "";
+    private double explorerScrollOffset;
+    private string diagnosticDetails = "";
+    private ListCollectionView? previewItems;
+    private IReadOnlyList<string>? selectedResultColumns;
+    private readonly PreviewCache<ExplorerPosition> explorerPositions = new(value => 512 + value.Filter.Length * 2L + value.Tokens.Sum(token => 64L + (token?.Length ?? 0) * 2L), maxBytes: 1024 * 1024, maxEntries: 64);
     private readonly List<ActionCommand> commands = [];
     private readonly List<string?> pageTokens = [null];
     private IReadOnlyList<ObjectEntry> pageEntries = [];
@@ -83,7 +99,26 @@ public sealed class MainViewModel : Observable
     public string PreviewTitle { get => previewTitle; private set => Set(ref previewTitle, value); }
     public string PreviewSummary { get => previewSummary; private set => Set(ref previewSummary, value); }
     public string PreviewPath { get => previewPath; private set => Set(ref previewPath, value); }
-    public DataView? PreviewRows { get => previewRows; private set => Set(ref previewRows, value); }
+    public DataView? PreviewRows { get => previewRows; private set { if (Set(ref previewRows, value)) { previewItems = value is null ? null : new ListCollectionView(new PreviewRowList(value)); Notify(nameof(PreviewItems)); } } }
+    public ListCollectionView? PreviewItems => previewItems;
+    public string PreviewLimitsLabel => IsTextPreview ? "" : "Máximo: 200 filas · 64 columnas · 512 caracteres/celda. Ordenación: solo esta vista.";
+    public string DiagnosticDetails { get => diagnosticDetails; private set { if (Set(ref diagnosticDetails, value)) RefreshCommands(); } }
+    public string ExplorerCacheLabel { get => explorerCacheLabel; private set => Set(ref explorerCacheLabel, value); }
+    public string ExplorerCacheDetails { get => explorerCacheDetails; private set => Set(ref explorerCacheDetails, value); }
+    public double ExplorerScrollOffset { get => explorerScrollOffset; private set { explorerScrollOffset = value; Notify(); } }
+    public bool HasFilter => Filter.Length > 0;
+    public string ExplorerEmptyMessage => HasFilter ? "Sin coincidencias con el filtro." : connected ? "Esta carpeta está vacía." : "Conecta un servidor para explorar archivos.";
+    public bool PrefetchEnabled
+    {
+        get => prefetchEnabled;
+        set
+        {
+            if (!Set(ref prefetchEnabled, value)) return;
+            if (!value) prefetchOperation?.Cancel(); else ResumePrefetch();
+            try { preferences.Save(new ClientPreferences(value)); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { RecordFailure(exception, nameof(PrefetchEnabled)); }
+        }
+    }
     public DataView? PreviewSchema { get => previewSchema; private set => Set(ref previewSchema, value); }
     public string Location => selectedBucket is null ? "Selecciona una conexión" : $"{selectedBucket} / {prefix}";
     public string FolderPath => selectedBucket is null ? "" : $"s3://{selectedBucket}/{prefix}";
@@ -94,7 +129,7 @@ public sealed class MainViewModel : Observable
     public string EndpointLabel => SelectedProfile?.Endpoint ?? "Tus servidores, en un solo lugar";
     public string PageLabel => folderTotals is { } totals ? $"Página {pageIndex + 1} de {Math.Max(pageIndex + 1, totals.Pages):N0}" : $"Página {pageIndex + 1} · {pageEntries.Count} elementos";
     public string FolderCountLabel => folderTotals is { } totals ? $"{totals.Files:N0} {(totals.Files == 1 ? "archivo" : "archivos")} · {totals.Folders:N0} {(totals.Folders == 1 ? "carpeta" : "carpetas")}" : isCountingFolder ? "Contando archivos…" : !connected ? "" : "Total no disponible";
-    public string Filter { get => filter; set { if (Set(ref filter, value)) ApplyFilter(); } }
+    public string Filter { get => filter; set { if (Set(ref filter, value)) { ExplorerScrollOffset = 0; ApplyFilter(); Notify(nameof(HasFilter)); Notify(nameof(ExplorerEmptyMessage)); RefreshCommands(); } } }
     public ConnectionProfile? SelectedProfile
     {
         get => selectedProfile;
@@ -142,12 +177,22 @@ public sealed class MainViewModel : Observable
     public ActionCommand ToggleThemeCommand { get; }
     public ActionCommand ExecuteQueryCommand { get; }
     public ActionCommand ResetQueryCommand { get; }
+    public ActionCommand ClearFilterCommand { get; }
+    public ActionCommand ChooseColumnsCommand { get; }
+    public ActionCommand CopyDiagnosticCommand { get; }
 
-    public MainViewModel()
+    public MainViewModel(IS3Service? storage = null, ProfileStore? profileStore = null, ClientPreferencesStore? preferencesStore = null, DiagnosticLog? diagnosticLog = null)
     {
+        s3 = storage ?? new S3Service(); store = profileStore ?? new ProfileStore();
+        diagnostics = diagnosticLog ?? new DiagnosticLog(); preferences = preferencesStore ?? new ClientPreferencesStore();
+        try { prefetchEnabled = preferences.Load().PrefetchEnabled; }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { diagnostics.Record(exception, nameof(ClientPreferencesStore)); }
         ToggleThemeCommand = Command(ToggleTheme, () => true);
+        ClearFilterCommand = Command(() => Filter = "", () => IsIdle && HasFilter);
+        ChooseColumnsCommand = Command(ChooseColumns, () => IsIdle && IsTabularPreview && currentPreview?.ResultSchema is not null && QueryText == LastExecutedQuery);
+        CopyDiagnosticCommand = Command(() => { try { Clipboard.SetText(DiagnosticDetails); } catch (System.Runtime.InteropServices.ExternalException) { Status = "No se pudo acceder al portapapeles. Inténtalo de nuevo."; } }, () => DiagnosticDetails.Length > 0);
         ExecuteQueryCommand = Command(() => _ = ExecuteQueryAsync(), () => IsIdle && IsTabularPreview && previewTarget is not null && !string.IsNullOrWhiteSpace(QueryText));
-        ResetQueryCommand = Command(() => { QueryText = ParquetQuery.Default; _ = ExecuteQueryAsync(); }, () => IsIdle && IsTabularPreview && previewTarget is not null);
+        ResetQueryCommand = Command(() => { selectedResultColumns = null; QueryText = ParquetQuery.Default; _ = ExecuteQueryAsync(); }, () => IsIdle && IsTabularPreview && previewTarget is not null);
         AddConnectionCommand = Command(() => EditProfile(null), () => IsIdle && storeReady);
         EditConnectionCommand = Command(() => EditProfile(SelectedProfile), () => IsIdle && storeReady && SelectedProfile is not null);
         RemoveConnectionCommand = Command(RemoveProfile, () => IsIdle && storeReady && SelectedProfile is not null);
@@ -155,8 +200,8 @@ public sealed class MainViewModel : Observable
         RefreshCommand = Command(() => _ = RunAsync("Actualizando…", async token => { InvalidateCache(); await ReloadAsync(token); }), CanBrowse);
         UpCommand = Command(() => _ = RunAsync("Abriendo carpeta…", async token =>
         {
-            var trimmed = prefix.TrimEnd('/'); var slash = trimmed.LastIndexOf('/');
-            prefix = slash < 0 ? "" : trimmed[..(slash + 1)]; await ReloadAsync(token);
+            var trimmed = prefix[..^1]; var slash = trimmed.LastIndexOf('/');
+            await NavigateFolderAsync(slash < 0 ? "" : trimmed[..(slash + 1)], token);
         }), () => CanBrowse() && prefix.Length > 0);
         NextPageCommand = Command(() => _ = RunAsync("Cargando página…", async token =>
         {
@@ -183,233 +228,6 @@ public sealed class MainViewModel : Observable
     private static bool CanPreview(ObjectEntry? entry) => entry is { IsFolder: false } && FilePreviewService.IsSupported(entry.Name);
     private void RefreshCommands() { foreach (var command in commands) command.Refresh(); }
 
-    public void Initialize()
-    {
-        try
-        {
-            foreach (var profile in store.Load()) Profiles.Add(profile);
-            storeReady = true; SelectedProfile = Profiles.FirstOrDefault(); RefreshCommands();
-        }
-        catch { Error = "No se pudieron leer las conexiones guardadas. Conserva connections.json y revisa que uses el mismo usuario de Windows; no se sobrescribirá el archivo."; }
-    }
-
-    private void EditProfile(ConnectionProfile? existing)
-    {
-        var dialog = new ConnectionDialog(existing) { Owner = Application.Current.MainWindow };
-        if (dialog.ShowDialog() != true || dialog.Result is not { } profile) return;
-        try
-        {
-            var updated = Profiles.Where(item => item.Id != profile.Id).Append(profile).ToArray();
-            store.Save(updated);
-            var index = existing is null ? -1 : Profiles.IndexOf(existing);
-            if (index < 0) Profiles.Add(profile); else Profiles[index] = profile;
-            SelectedProfile = profile; Status = "Conexión guardada. Pulsa Conectar para comprobar el acceso.";
-        }
-        catch { Error = "No se pudo guardar la conexión cifrada. Revisa el acceso a la carpeta de configuración."; }
-    }
-
-    private void RemoveProfile()
-    {
-        if (SelectedProfile is not { } profile) return;
-        if (MessageBox.Show($"¿Quitar la conexión «{profile.Name}»? Los archivos del servidor se conservan.", "Quitar conexión", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        try { store.Save(Profiles.Where(item => item.Id != profile.Id)); Profiles.Remove(profile); SelectedProfile = Profiles.FirstOrDefault(); }
-        catch { Error = "No se pudo actualizar la configuración de conexiones."; }
-    }
-
-    private async Task ConnectAsync(CancellationToken token)
-    {
-        InvalidateCache();
-        connected = false; NotifyConnection();
-        ClearPage(); ClearPreview(); Buckets.Clear(); selectedBucket = null; Notify(nameof(SelectedBucket)); NotifyLocation();
-        IsExplorerLoading = true;
-        var buckets = await s3.ListBucketsAsync(SelectedProfile!, token);
-        foreach (var bucket in buckets) Buckets.Add(bucket);
-        connected = true; NotifyConnection(); selectedBucket = Buckets.FirstOrDefault(); Notify(nameof(SelectedBucket)); prefix = "";
-        if (selectedBucket is not null) await ReloadAsync(token);
-        else { NotifyLocation(); Status = "Conexión correcta. No hay buckets visibles para estas credenciales."; }
-    }
-
-    private async Task ReloadAsync(CancellationToken token)
-    {
-        ClearPreview(); ClearPage(); NotifyLocation();
-        var page = await LoadPageAsync(SelectedProfile!, SelectedBucket!, prefix, null, token); SetPage(page);
-        StartFolderCount(page);
-    }
-
-    private async Task<ObjectPage> LoadPageAsync(ConnectionProfile profile, string bucket, string folder, string? continuation, CancellationToken token)
-    {
-        IsExplorerLoading = true;
-        try { return await s3.ListAsync(profile, bucket, folder, continuation, token); }
-        finally { IsExplorerLoading = false; }
-    }
-
-    private void NotifyLocation() { Notify(nameof(Location)); Notify(nameof(FolderPath)); Notify(nameof(Breadcrumbs)); Notify(nameof(Ancestors)); }
-    private void NotifyConnection() { Notify(nameof(ConnectionState)); Notify(nameof(IsConnected)); }
-    private void NotifyTotals() { Notify(nameof(PageLabel)); Notify(nameof(FolderCountLabel)); }
-    private void CancelFolderCount()
-    {
-        folderCountOperation?.Cancel(); folderCountOperation = null; folderTotals = null; isCountingFolder = false; NotifyTotals();
-    }
-    private void StartFolderCount(ObjectPage firstPage)
-    {
-        CancelFolderCount();
-        if (firstPage.NextToken is null)
-        {
-            folderTotals = new FolderTotals(firstPage.Entries.LongCount(entry => !entry.IsFolder), firstPage.Entries.LongCount(entry => entry.IsFolder), 1);
-            NotifyTotals(); return;
-        }
-        var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-        folderCountOperation = cancellation; isCountingFolder = true; NotifyTotals();
-        _ = CountFolderAsync(SelectedProfile!, SelectedBucket!, prefix, cancellation);
-    }
-    private async Task CountFolderAsync(ConnectionProfile profile, string bucket, string folder, CancellationTokenSource cancellation)
-    {
-        try
-        {
-            var totals = await s3.CountFolderAsync(profile, bucket, folder, cancellation.Token);
-            if (ReferenceEquals(folderCountOperation, cancellation)) folderTotals = totals;
-        }
-        catch (Exception) { /* Counting must never block navigation or replace an open file's status. */ }
-        finally
-        {
-            if (ReferenceEquals(folderCountOperation, cancellation)) { folderCountOperation = null; isCountingFolder = false; NotifyTotals(); }
-            cancellation.Dispose();
-        }
-    }
-    private void ClearPage() { CancelFolderCount(); pageIndex = 0; nextToken = null; pageTokens.Clear(); pageTokens.Add(null); pageEntries = []; Entries.Clear(); SelectedEntry = null; Notify(nameof(PageLabel)); }
-    private void SetPage(ObjectPage page) { pageEntries = page.Entries; nextToken = page.NextToken; SelectedEntry = null; ApplyFilter(); NotifyLocation(); Notify(nameof(PageLabel)); Status = page.Entries.Count == 0 ? "Esta carpeta está vacía." : $"{page.Entries.Count} elementos en esta página."; }
-    private void ApplyFilter() => Entries = new ObservableCollection<ObjectEntry>(pageEntries.Where(item => item.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase)));
-    private void SaveCurrentView()
-    {
-        if (currentCacheKey is not null && currentPreview is not null)
-            previewCache.Put(currentCacheKey, new CachedView(currentPreview, QueryText, LastExecutedQuery, LastAttemptedQuery, QueryError, PreviewSummary));
-    }
-    private void InvalidateCache() { previewCache.Clear(); currentCacheKey = null; }
-    private void ClearPreview()
-    {
-        SaveCurrentView(); currentCacheKey = null; currentPreview = null;
-        previewTarget = null; IsPreviewOpen = false;
-        IsTextPreview = false; PreviewText = "";
-        PreviewRows = null; PreviewSchema = null; PreviewSummary = ""; QueryError = "";
-        PreviewPath = "";
-        QueryText = ParquetQuery.Default; LastExecutedQuery = ParquetQuery.Default; LastAttemptedQuery = ParquetQuery.Default; RefreshCommands();
-    }
-
-    public void OpenSelected()
-    {
-        if (!CanBrowse() || SelectedEntry is not { } entry) return;
-        if (entry.IsFolder) _ = RunAsync("Abriendo carpeta…", async token => { prefix = entry.Key; await ReloadAsync(token); });
-        else if (CanPreview(entry)) _ = PreviewSelectedAsync();
-        else Status = "El visor admite archivos Parquet, CSV y TXT. Puedes descargar otros formatos con clic secundario.";
-    }
-
-    public void NavigateToPrefix(string target)
-    {
-        if (!CanBrowse() || target == prefix || !prefix.StartsWith(target, StringComparison.Ordinal) || (target.Length > 0 && !target.EndsWith('/'))) return;
-        _ = RunAsync("Abriendo carpeta…", async token => { prefix = target; await ReloadAsync(token); });
-    }
-
-    private async Task PreviewSelectedAsync()
-    {
-        if (SelectedEntry is not { } entry || SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
-        var target = new PreviewTarget(profile, bucket, entry.Key);
-        var cacheKey = JsonSerializer.Serialize(new[] { profile.Id.ToString(), profile.Endpoint, bucket, entry.Key, entry.Size.ToString(), entry.Modified?.ToUniversalTime().Ticks.ToString() ?? "" });
-        await OpenPreviewAsync(target, cacheKey, entry.Name);
-    }
-
-    private void ChooseLocalPreview()
-    {
-        var dialog = new OpenFileDialog { Filter = "Archivos compatibles|*.parquet;*.csv;*.txt|Parquet|*.parquet|CSV|*.csv|Texto|*.txt", Title = "Abrir archivo local" };
-        if (dialog.ShowDialog() != true) return;
-        _ = OpenLocalAsync(dialog.FileName);
-    }
-
-    public async Task OpenLocalAsync(string path)
-    {
-        if (IsBusy) return;
-        await RunAsync("Abriendo archivo local…", async token =>
-        {
-            var info = new FileInfo(path);
-            var cacheKey = JsonSerializer.Serialize(new[] { "local", info.FullName, info.Length.ToString(), info.LastWriteTimeUtc.Ticks.ToString() });
-            await LoadPreviewAsync(new PreviewTarget(null, null, info.FullName), cacheKey, info.Name, token);
-        });
-    }
-
-    private Task OpenPreviewAsync(PreviewTarget target, string cacheKey, string name)
-        => RunAsync($"Abriendo {name}…", token => LoadPreviewAsync(target, cacheKey, name, token));
-
-    private async Task LoadPreviewAsync(PreviewTarget target, string cacheKey, string name, CancellationToken token)
-    {
-        ClearPreview(); Error = "";
-        if (previewCache.TryGet(cacheKey, out var cached))
-        {
-            previewTarget = target; currentCacheKey = cacheKey;
-            QueryText = cached.Sql; LastExecutedQuery = cached.ExecutedSql; LastAttemptedQuery = cached.AttemptedSql;
-            ShowPreview(cached.Result, name); QueryError = cached.Error; PreviewSummary = cached.Summary;
-            Status = "Vista recuperada de la caché."; return;
-        }
-        LoadingFileName = name; IsFileLoading = true;
-        try
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(60));
-            ParquetPreview result;
-            try
-            {
-                result = target.Profile is null
-                    ? await files.PreviewLocalAsync(target.Key, timeout.Token)
-                    : await files.PreviewRemoteAsync(target.Profile, target.Bucket!, target.Key, timeout.Token);
-            }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            { throw new ArgumentException("La apertura superó 60 segundos. Revisa el archivo y la conexión."); }
-            previewTarget = target; currentCacheKey = cacheKey; ShowPreview(result, name); SaveCurrentView();
-        }
-        finally { IsFileLoading = false; }
-    }
-
-    private void ShowPreview(ParquetPreview result, string name)
-    {
-        currentPreview = result; IsTextPreview = result.Text is not null; PreviewText = result.Text ?? "";
-        PreviewRows = result.Rows.DefaultView; PreviewSchema = result.Schema.DefaultView;
-        PreviewTitle = name; IsPreviewOpen = true;
-        PreviewPath = previewTarget is { } target ? target.Profile is null ? target.Key : $"s3://{target.Bucket}/{target.Key}" : result.Source;
-        PreviewSummary = IsTextPreview
-            ? $"{PreviewText.Length:N0} caracteres{(result.IsTruncated ? " · vista parcial: se alcanzó el límite de texto" : " · texto completo") }"
-            : $"{result.Rows.Rows.Count} filas en la vista previa · {result.Schema.Rows.Count} columnas en el archivo";
-        Status = IsTextPreview ? "Vista previa de texto." : "Máximo 200 filas, 64 columnas y 512 caracteres por celda.";
-    }
-
-    public IReadOnlyList<SqlSuggestion> QuerySuggestions(string prefix) => SqlCompletion.Suggest(
-        PreviewSchema?.Table?.Rows.Cast<DataRow>().Select(row => ((string)row[0], (string)row[1])) ?? [], prefix);
-
-    private async Task ExecuteQueryAsync()
-    {
-        if (previewTarget is not { } target || IsBusy || !IsTabularPreview) return;
-        var sql = QueryText;
-        LastAttemptedQuery = sql;
-        await RunAsync("Ejecutando consulta…", async token =>
-        {
-            QueryError = "";
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(60));
-            var clock = Stopwatch.StartNew();
-            ParquetPreview result;
-            try
-            {
-                result = target.Profile is null
-                    ? await files.QueryLocalAsync(target.Key, sql, timeout.Token)
-                    : await files.QueryRemoteAsync(target.Profile, target.Bucket!, target.Key, sql, timeout.Token);
-            }
-            catch (OperationCanceledException) when (!token.IsCancellationRequested)
-            { throw new ParquetQueryException("La consulta superó 60 segundos. Reduce los datos consultados o añade un filtro."); }
-            LastExecutedQuery = sql;
-            ShowPreview(result, PreviewTitle);
-            PreviewSummary = $"{result.Rows.Rows.Count} filas · {result.Rows.Columns.Count} columnas en el resultado · {clock.ElapsedMilliseconds:N0} ms";
-            Status = "Consulta terminada. Se muestran hasta 200 filas del resultado.";
-            SaveCurrentView();
-        });
-    }
-
     private void ToggleTheme()
     {
         try { ThemeManager.Apply(!IsDarkTheme, persist: true); }
@@ -418,133 +236,24 @@ public sealed class MainViewModel : Observable
         Notify(nameof(IsDarkTheme)); Notify(nameof(ThemeAction));
     }
 
-    private void DeleteSelected()
-    {
-        if (SelectedEntry is { IsFolder: true } folder) { _ = DeleteFolderAsync(folder); return; }
-        DeleteFile();
-    }
-
-    private async Task DeleteFolderAsync(ObjectEntry entry)
-    {
-        if (SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
-        await RunAsync("Revisando el contenido de la carpeta…", async token =>
-        {
-            using var plan = await folders.PrepareAsync(profile, bucket, entry.Key, token);
-            token.ThrowIfCancellationRequested();
-            if (MessageBox.Show(Application.Current.MainWindow,
-                $"¿Eliminar la carpeta «{entry.Name}» y sus {plan.Files:N0} archivos, incluidas todas sus subcarpetas?\n\nConexión: {profile.Name}\nRuta: s3://{bucket}/{entry.Key}\n\nSi cancelas durante la eliminación, lo ya eliminado no se restaura.",
-                "Eliminar carpeta y su contenido", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
-            { Status = "Eliminación de carpeta cancelada."; return; }
-            InvalidateCache(); CancelFolderCount();
-            if (previewTarget is { } opened && opened.Profile?.Id == profile.Id && opened.Bucket == bucket && opened.Key.StartsWith(entry.Key, StringComparison.Ordinal)) ClearPreview();
-            try
-            {
-                var reporter = new Progress<FolderProgress>(value =>
-                { Progress = value.Percent; Status = $"Eliminando carpeta: {value.Completed:N0} de {value.Total:N0} objetos."; });
-                await folders.DeleteAsync(profile, plan, reporter, token);
-                Status = $"Carpeta eliminada: {entry.Name} · {plan.Files:N0} archivos.";
-            }
-            finally { await RefreshAfterFolderChangeAsync(profile, bucket); }
-        });
-    }
-
-    private async Task RefreshAfterFolderChangeAsync(ConnectionProfile profile, string bucket)
-    {
-        // Use a separate token to reflect completed batches even after a cancellation.
-        using var refresh = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var previousStatus = Status;
-        try
-        {
-            pageTokens.Clear(); pageTokens.Add(null); pageIndex = 0;
-            var page = await LoadPageAsync(profile, bucket, prefix, null, refresh.Token);
-            SetPage(page); StartFolderCount(page); Status = previousStatus;
-        }
-        catch { Status = previousStatus + " Pulsa Actualizar para renovar la lista."; }
-    }
-
-    private void DeleteFile()
-    {
-        if (SelectedEntry is not { IsFolder: false } entry || SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
-        if (MessageBox.Show(Application.Current.MainWindow,
-            $"¿Eliminar «{entry.Name}» del bucket «{bucket}»?\n\nConexión: {profile.Name}\nClave: {entry.Key}",
-            "Eliminar archivo", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
-        _ = RunAsync($"Eliminando {entry.Name}…", async token =>
-        {
-            InvalidateCache();
-            CancelFolderCount();
-            await s3.DeleteAsync(profile, bucket, entry.Key, token);
-            if (previewTarget is { } opened && opened.Profile?.Id == profile.Id && opened.Bucket == bucket && opened.Key == entry.Key) ClearPreview();
-            // Retain other open previews while refreshing this page after deletion.
-            pageTokens.Clear(); pageTokens.Add(null); pageIndex = 0;
-            var page = await LoadPageAsync(profile, bucket, prefix, null, token); SetPage(page); StartFolderCount(page);
-            Status = $"Archivo eliminado: {entry.Name}";
-        });
-    }
-
-    private void ChooseUpload()
-    {
-        var dialog = new OpenFileDialog { Multiselect = true, Title = "Subir archivos a la carpeta actual" };
-        if (dialog.ShowDialog() != true) return;
-        if (MessageBox.Show($"Subir {dialog.FileNames.Length} archivo(s) a {Location}. Si ya existe una clave con el mismo nombre, se reemplazará su contenido actual. ¿Continuar?", "Subir archivos", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        _ = RunAsync("Subiendo archivos…", async token =>
-        {
-            InvalidateCache();
-            CancelFolderCount();
-            var reporter = new Progress<TransferProgress>(value => Progress = value.Percent);
-            var completed = 0;
-            foreach (var path in dialog.FileNames)
-            {
-                Status = $"Subiendo {++completed}/{dialog.FileNames.Length}: {System.IO.Path.GetFileName(path)}";
-                await s3.UploadAsync(SelectedProfile!, SelectedBucket!, prefix + System.IO.Path.GetFileName(path), path, reporter, token);
-            }
-            await ReloadAsync(token); Status = $"Carga terminada: {completed} archivo(s).";
-        });
-    }
-
-    private void ChooseDownload()
-    {
-        if (SelectedEntry is { IsFolder: true } folder) { ChooseFolderDownload(folder); return; }
-        if (SelectedEntry is not { IsFolder: false } entry) return;
-        var dialog = new SaveFileDialog { FileName = System.IO.Path.GetFileName(entry.Name), Title = "Descargar archivo", OverwritePrompt = true };
-        if (dialog.ShowDialog() != true) return;
-        _ = RunAsync($"Descargando {entry.Name}…", async token =>
-        {
-            await s3.DownloadAsync(SelectedProfile!, SelectedBucket!, entry.Key, dialog.FileName, new Progress<TransferProgress>(value => Progress = value.Percent), token);
-            Status = $"Descarga terminada: {dialog.FileName}";
-        });
-    }
-
-    private void ChooseFolderDownload(ObjectEntry entry)
-    {
-        if (SelectedProfile is not { } profile || SelectedBucket is not { } bucket) return;
-        var name = new string(entry.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character).ToArray());
-        var dialog = new SaveFileDialog { FileName = (name.Length > 0 ? name : "carpeta") + ".zip", Filter = "Archivo ZIP|*.zip", DefaultExt = ".zip", AddExtension = true, Title = "Descargar carpeta completa", OverwritePrompt = true };
-        if (dialog.ShowDialog() != true) return;
-        _ = RunAsync("Revisando archivos para descargar la carpeta…", async token =>
-        {
-            using var plan = await folders.PrepareAsync(profile, bucket, entry.Key, token);
-            var reporter = new Progress<FolderProgress>(value =>
-            { Progress = value.Percent; Status = $"Descargando carpeta: {value.Completed:N0} de {value.Total:N0} objetos · {ObjectEntry.FormatSize(value.Bytes)}."; });
-            await folders.DownloadZipAsync(profile, plan, dialog.FileName, reporter, token);
-            Status = $"Carpeta descargada: {dialog.FileName}";
-        });
-    }
-
     private async Task RunAsync(string message, Func<CancellationToken, Task> action)
     {
         if (IsBusy) return;
         using var cancellation = new CancellationTokenSource(); operation = cancellation;
-        IsBusy = true; Error = ""; Status = message; Progress = 0;
+        IsBusy = true; Error = ""; DiagnosticDetails = ""; Status = message; Progress = 0;
+        prefetchOperation?.Cancel();
         try { await action(cancellation.Token); }
         catch (ParquetQueryException exception)
         {
+            RecordFailure(exception, action.Method.Name);
             if (IsPreviewOpen) QueryError = exception.Message; else Error = exception.Message;
             Status = "La consulta no se completó. Se conserva el último resultado disponible.";
         }
-        catch (FolderTransferException exception) { Error = exception.Message; Status = "La operación de carpeta no se completó."; }
+        catch (FolderTransferException exception) { RecordFailure(exception, action.Method.Name); Error = exception.Message; Status = "La operación de carpeta no se completó."; }
         catch (OperationCanceledException) { Status = "Operación cancelada. Los cambios ya completados se conservan."; }
         catch (AmazonS3Exception exception)
         {
+            RecordFailure(exception, action.Method.Name);
             Error = exception.StatusCode == System.Net.HttpStatusCode.Forbidden
                 ? "Acceso denegado. Revisa las credenciales y los permisos; si solo tienes acceso a un bucket, indícalo en la conexión."
                 : $"No se pudo completar la operación S3 ({exception.ErrorCode ?? exception.StatusCode.ToString()}). Revisa endpoint, red y permisos.";
@@ -552,17 +261,20 @@ public sealed class MainViewModel : Observable
         }
         catch (Exception exception)
         {
+            RecordFailure(exception, action.Method.Name);
             // Provider exceptions can include SQL containing connection details; never display raw SQL/errors.
             Error = exception is ArgumentException ? exception.Message : "La operación no se completó. Revisa la conexión, el formato del archivo y la disponibilidad de httpfs para tablas remotas.";
             Status = "La operación no se completó.";
         }
-        finally { operation = null; IsExplorerLoading = false; IsBusy = false; }
+        finally { operation = null; IsExplorerLoading = false; IsBusy = false; ResumePrefetch(); }
     }
 
     public void Cancel() => operation?.Cancel();
-    public void StopBackgroundWork() => CancelFolderCount();
+    public void StopBackgroundWork() { backgroundStopped = true; prefetchOperation?.Cancel(); CancelFolderCount(); }
+    private void RecordFailure(Exception exception, string category) => DiagnosticDetails = diagnostics.Record(exception, category).Display;
     public void LoadDesignPreview(bool populated = true)
     {
+        backgroundStopped = true;
         if (!populated) { storeReady = true; RefreshCommands(); return; }
         Profiles.Add(new ConnectionProfile { Name = "Almacenamiento", Endpoint = "https://storage.ejemplo.com" });
         Profiles.Add(new ConnectionProfile { Name = "Desarrollo", Endpoint = "https://dev.ejemplo.com" });
@@ -594,5 +306,6 @@ public sealed class MainViewModel : Observable
     }
 
     private sealed record PreviewTarget(ConnectionProfile? Profile, string? Bucket, string Key);
+    private sealed record ExplorerPosition(int Page, string?[] Tokens, string? SelectedKey, double Offset, string Filter);
     private sealed record CachedView(ParquetPreview Result, string Sql, string ExecutedSql, string AttemptedSql, string Error, string Summary);
 }

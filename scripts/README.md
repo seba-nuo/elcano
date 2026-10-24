@@ -8,11 +8,13 @@ Ejecuta los comandos desde la raíz del repositorio:
 | --- | --- | --- |
 | `common.ps1` | Configura el SDK local o instalado, las cachés de NuGet y la función que comprueba errores de `dotnet`. Lo cargan los otros scripts. | No hace falta ejecutarlo por separado. |
 | `run.ps1` | Compila si hay cambios y abre la aplicación WPF en modo Release. | `.\scripts\run.ps1` |
-| `publish.ps1` | Prepara la extensión nativa `httpfs` y genera una carpeta portable para Windows x64, incluyendo .NET y DuckDB. | `.\scripts\publish.ps1` |
+| `publish.ps1` | Prepara `httpfs`, genera la carpeta portable de Windows x64, un ZIP y su SHA-256. Acepta `-OutputDirectory`, `-PackageVersion` y `-NoRestore` para una solución ya compilada. | `.\scripts\publish.ps1` |
 | `test.ps1` | Comprueba perfiles cifrados, Parquet, CSV, TXT y caché. Con `-FolderProtocol`, prueba ZIP, paginación, eliminación recursiva, cancelación y errores parciales contra un S3 simulado local. Con `-Integration`, prueba los dos MinIO locales usando buckets temporales que elimina al terminar. | `.\scripts\test.ps1`, `.\scripts\test.ps1 -FolderProtocol` o `.\scripts\test.ps1 -Integration` |
 | `seed-samples.ps1` | Genera cinco Parquet, dos CSV y un TXT sintéticos por servidor; los sube y verifica su vista previa. Con `-PaginationFiles` añade objetos para probar páginas. | `.\scripts\seed-samples.ps1 -UseLocalLabCredentials` |
 
 Las cachés, archivos generados y copias locales de los ejemplos se guardan bajo `.local/`, excluido de Git. La aplicación publicada se guarda en `artifacts/`. La primera restauración de paquetes o descarga de `httpfs` requiere Internet.
+
+`test.ps1 -Ui` ejecuta las pruebas WPF mantenidas en el repositorio y deja capturas de ambos temas en `TestResults/UI/`, también excluido de Git. `-NoBuild` reutiliza una compilación Release anterior y evita restaurar o compilar otra vez. Los modos `-Ui`, `-FolderProtocol` y `-Integration` se ejecutan por separado. GitHub Actions ejecuta los modos sin servidores externos y publica el ZIP como artefacto de la compilación.
 
 ## Ejemplos Parquet persistentes
 
